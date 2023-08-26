@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-
 type ListNode[T any] interface {
 	Node[[]T]
 	AnyNode
@@ -37,17 +35,11 @@ func (l *listNodeImpl[T]) GetAnyResolvables() []AnyNode {
 
 func (l *listNodeImpl[T]) Run() any {
 	results := make([]T, 0, len(l.children))
-	fmt.Println("\t children", l.children)
 	for _, c := range l.children {
-		fmt.Println("\t list child result", c.GetValue())
 		results = append(results, c.GetValue())
 	}
 	l.results = results
 	return results
-}
-
-func (l *listNodeImpl[T]) InjectResult(r any) {
-	return
 }
 
 func (l *listNodeImpl[T]) Result() any {

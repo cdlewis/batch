@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-
 type TransformNode[T, U any] interface {
 	Node[U]
 	AnyNode
@@ -9,22 +7,20 @@ type TransformNode[T, U any] interface {
 
 type transformNodeImpl[T, U any] struct {
 	isResolved bool
-	child      AnyNode
-	fn         func(any) any
-	result     any
+	child      Node[T]
+	fn         func(T) U
+	result     U
 }
 
 func NewTransformNode[T, U any](node Node[T], transformer func(T) U) TransformNode[T, U] {
 	return &transformNodeImpl[T, U]{
 		child: node,
-		fn: func(arg any) any {
-			return transformer(node.GetValue())
-		},
+		fn:    transformer,
 	}
 }
 
 func (l *transformNodeImpl[T, U]) GetValue() U {
-	return *new(U)
+	return l.result
 }
 
 func (l *transformNodeImpl[T, U]) IsResolved() bool {
@@ -36,16 +32,7 @@ func (l *transformNodeImpl[T, U]) GetAnyResolvables() []AnyNode {
 }
 
 func (l *transformNodeImpl[T, U]) Run() any {
-	fmt.Println(">>> running final transform")
-	l.result = l.fn(l.child.Result())
+	l.result = l.fn(l.child.GetValue())
 	l.isResolved = true
-	return l.result
-}
-
-func (l *transformNodeImpl[T, U]) InjectResult(r any) {
-	return
-}
-
-func (l *transformNodeImpl[T, U]) Result() any {
 	return l.result
 }

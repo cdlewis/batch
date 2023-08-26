@@ -1,16 +1,24 @@
 package main
 
+import "fmt"
+
 type TaskManager struct {
 	counter      int
 	tasks        map[int]AnyNode
 	dependencies map[int]map[int]struct{}
+	rootTask     AnyNode
 }
 
-func NewTaskManager() *TaskManager {
-	return &TaskManager{
+func NewTaskManager(rootTask AnyNode) *TaskManager {
+	tm := &TaskManager{
 		tasks:        map[int]AnyNode{},
 		dependencies: map[int]map[int]struct{}{},
+		rootTask:     rootTask,
 	}
+
+	tm.exploreTaskGraph()
+
+	return tm
 }
 
 func (t *TaskManager) AddTask(node AnyNode) int {
@@ -44,4 +52,55 @@ func (t *TaskManager) FinishTask(id int) []int {
 	}
 
 	return unblockedTasks
+}
+
+func (t *TaskManager) GetRunnableTasksIDs() []int {
+	result := []int{}
+
+	for id := range t.tasks {
+		result = append(result, id)
+	}
+
+	return result
+}
+
+type NodeParentPair struct {
+	ParentID int
+	Node     AnyNode
+}
+
+func (t *TaskManager) exploreTaskGraph() {
+	stack := []NodeParentPair{
+		{
+			ParentID: -1,
+			Node:     t.rootTask,
+		},
+	}
+
+	for len(stack) > 0 {
+		nextStack := []NodeParentPair{}
+
+		for len(stack) > 0 {
+			nextNode := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+
+			fmt.Println("Exploring", nextNode)
+
+			currentNodeID := t.AddTask(nextNode.Node)
+
+			if nextNode.ParentID != -1 {
+				t.AddDependency(nextNode.ParentID, currentNodeID)
+			}
+
+			blockingWork := nextNode.Node.GetAnyResolvables()
+			for _, w := range blockingWork {
+				nextStack = append(nextStack, NodeParentPair{
+					ParentID: currentNodeID,
+					Node:     w,
+				})
+			}
+		}
+
+		stack = nextStack
+	}
 }

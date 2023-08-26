@@ -40,46 +40,13 @@ func main() {
 	fmt.Println(resolve[string](users))
 }
 
-type ExploreNextJob struct {
-	ParentID int
-	Node     AnyNode
-}
 
 func resolve[T any](node AnyNode) T {
-	taskManager := NewTaskManager()
+	taskManager := NewTaskManager(node)
 
 	runNext := []int{}
 
-	exploreNext := []ExploreNextJob{
-		{
-			ParentID: -1,
-			Node:     node,
-		},
-	}
-	for len(exploreNext) > 0 {
-		nextNode := exploreNext[0]
-		fmt.Println("Exploring", nextNode)
-		exploreNext = exploreNext[1:]
 
-		currentNodeID := taskManager.AddTask(nextNode.Node)
-
-		if nextNode.ParentID != -1 {
-			taskManager.AddDependency(nextNode.ParentID, currentNodeID)
-		}
-
-		blockingWork := nextNode.Node.GetAnyResolvables()
-		if len(blockingWork) == 0 {
-			runNext = append(runNext, currentNodeID)
-			continue
-		}
-
-		for _, w := range blockingWork {
-			exploreNext = append(exploreNext, ExploreNextJob{
-				ParentID: currentNodeID,
-				Node:     w,
-			})
-		}
-	}
 
 	fmt.Println(taskManager)
 	for len(runNext) > 0 {
@@ -93,7 +60,7 @@ func resolve[T any](node AnyNode) T {
 			if !currentTask.IsResolved() {
 				currentTask.Run()
 			}
-			fmt.Println(taskID, "completed with", currentTask.Result())
+			fmt.Println(taskID, "completed with")
 
 			unblockedTasks := taskManager.FinishTask(taskID)
 			nextRunNext = append(nextRunNext, unblockedTasks...)
@@ -102,18 +69,8 @@ func resolve[T any](node AnyNode) T {
 		runNext = nextRunNext
 	}
 
-	return taskManager.GetTask(1).Result().(T)
+	return taskManager.GetTask(1).(Node[T]).GetValue()
 }
-
-type AnyNode interface {
-	IsResolved() bool
-	GetAnyResolvables() []AnyNode
-	Run() any
-	InjectResult(any)
-	Result() any
-}
-
-type AnyResolvable interface{}
 
 func NewResolver[T, U any](id string, resolve func(T) U) Resolver[T, U] {
 	return Resolver[T, U]{
@@ -125,39 +82,6 @@ func NewResolver[T, U any](id string, resolve func(T) U) Resolver[T, U] {
 type Resolver[T, U any] struct {
 	id      string
 	resolve func(T) U
-}
-
-func (r Resolver[T, U]) fetch(arg T) ResolvableValue[U] {
-	return ResolvableValue[U]{
-		key: r.id,
-		arg: arg,
-	}
-}
-
-type ResolvableValue[U any] struct {
-	Node[U]
-
-	key string
-	arg any
-}
-
-func (r ResolvableValue[U]) Key() string {
-	return r.key
-}
-
-type Transform[T, U any] interface {
-	Apply(T) U
-}
-
-type Node[T any] interface {
-	AnyNode
-	GetValue() T
-}
-
-type Resolvable[T any] interface {
-	Node[T]
-
-	Key() string
 }
 
 // type FlatMapNode[T, U any] struct {
