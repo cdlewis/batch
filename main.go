@@ -2,228 +2,200 @@ package main
 
 import (
 	"fmt"
-	"sync"
 )
 
 func main() {
-	dataSource := NewFanoutDataSource(
-		[]DataSource[int, []int]{
-			TransformDataSourceResult[int, []int](
-				TransformDataSourceResult[int, []int](
-					NewFruitDataSource([]int{1, 2, 3}),
-					func(result []int) []int {
-						for idx := range result {
-							result[idx] /= 2
-						}
-						return result
-					},
-				),
-				func(result []int) []int {
-					return result[1:]
-				},
-			),
-			TransformDataSourceResult[int, []int](
-				NewFruitDataSource([]int{2, 4, 6}),
-				func(result []int) []int {
-					for idx := range result {
-						result[idx] *= 2
-					}
-					return result
-				},
-			),
+	// userResolver := Resolver[string, string]{
+	// 	id: "user",
+	// 	resolve: func(requests []ResolvableValue[string]) []string {
+	// 		results := []string{}
+	// 		for _, r := range requests {
+	// 			results = append(results, "resolved: "+r.arg.(string))
+	// 		}
+	// 		return results
+	// 	},
+	// }
+
+	// resolvers := map[string]Resolver[any, any]{
+	// 	"user": userResolver,
+	// }
+
+	// firstUser := userResolver.fetch("chris")
+	// secondUser := userResolver.fetch("mike")
+	users := NewTransformNode[[]string, string](
+		NewListNode[string]([]AnyNode{
+			NewValueNode("Chris"),
+			NewValueNode("Mike"),
+		}),
+		func(results []string) string {
+			fmt.Println("trans running")
+			result := ""
+			for _, i := range results {
+				result += i + ","
+			}
+			return result
 		},
 	)
 
-	fmt.Println("Initial Graph:\n")
-	DependencyGraph(dataSource, 0)
-	//fmt.Println(dataSource.Fetch(1))
+	fmt.Println(resolve[string](users))
 }
 
-func DependencyGraph(ds WrappedDataSource, depth int) {
-	for i := 0; i < depth; i++ {
-		fmt.Print("\t")
-	}
-	fmt.Println(ds.Type())
+type ExploreNextJob struct {
+	ParentID int
+	Node     AnyNode
+}
 
-	if wrappedDS, ok := ds.(WrappedDataSource); ok {
-		for _, child := range wrappedDS.Unwrap() {
-			DependencyGraph(child, depth+1)
+func resolve[T any](node AnyNode) T {
+	counter := 0
+	tasks := map[int]AnyNode{}
+	blocked := map[int][]int{}
+
+	runNext := []int{}
+
+	exploreNext := []ExploreNextJob{
+		{
+			ParentID: 0,
+			Node:     node,
+		},
+	}
+	for len(exploreNext) > 0 {
+		nextNode := exploreNext[0]
+		fmt.Println("Exploring", nextNode)
+		exploreNext = exploreNext[1:]
+
+		counter++
+		tasks[counter] = nextNode.Node
+
+		if nextNode.ParentID != 0 {
+			blocked[nextNode.ParentID] = append(blocked[nextNode.ParentID], counter)
+		}
+
+		blockingWork := nextNode.Node.GetAnyResolvables()
+		if len(blockingWork) == 0 {
+			runNext = append(runNext, counter)
+			continue
+		}
+
+		for _, w := range blockingWork {
+			exploreNext = append(exploreNext, ExploreNextJob{
+				ParentID: counter,
+				Node:     w,
+			})
 		}
 	}
+	fmt.Println("task list", tasks)
+
+	for len(runNext) > 0 {
+		nextRunNext := []int{}
+
+		for len(runNext) > 0 {
+			taskID := runNext[0]
+			runNext = runNext[1:]
+
+			result := tasks[taskID].Run()
+			fmt.Println(taskID, "completed with", result)
+
+			// inject the result into each blocked task and see if it can be run now
+			for blockedTaskID, blockingTasks := range blocked {
+				canRun := true
+				for _, t := range blockingTasks {
+					if t != taskID {
+						if !tasks[t].IsResolved() {
+							canRun = false
+						}
+						continue
+					}
+					fmt.Println("Found", taskID, "blocks", blockedTaskID)
+				}
+
+				if canRun {
+					nextRunNext = append(nextRunNext, blockedTaskID)
+				}
+			}
+		}
+
+		runNext = nextRunNext
+	}
+
+	fmt.Println(tasks)
+	return tasks[1].Result().(T)
 }
 
-type FanoutDataSource[Q, R any] struct {
-	DataSource[Q, []R]
-	WrappedDataSource
-
-	resultTransformers []func(Q, any) R
-	dataSources        []DataSource[Q, R]
+type AnyNode interface {
+	IsResolved() bool
+	GetAnyResolvables() []AnyNode
+	Run() any
+	InjectResult(any)
+	Result() any
 }
 
-func NewFanoutDataSource[Q, R any](ds []DataSource[Q, R]) DataSource[Q, []R] {
-	return FanoutDataSource[Q, R]{
-		dataSources: ds,
+type AnyResolvable interface{}
+
+func NewResolver[T, U any](id string, resolve func(T) U) Resolver[T, U] {
+	return Resolver[T, U]{
+		id:      id,
+		resolve: resolve,
 	}
 }
 
-func (f FanoutDataSource[Q, R]) Type() string {
-	return "FanoutDataSource"
+type Resolver[T, U any] struct {
+	id      string
+	resolve func(T) U
 }
 
-func (f FanoutDataSource[Q, R]) Fetch(q Q) []R {
-	wg := sync.WaitGroup{}
-	results := make([]R, len(f.dataSources))
-
-	for idx, f := range f.dataSources {
-		idx := idx
-		f := f
-		wg.Add(1)
-
-		go func() {
-			results[idx] = f.Fetch(q)
-			wg.Done()
-		}()
-	}
-
-	wg.Wait()
-
-	return results
-}
-
-func (f FanoutDataSource[Q, R]) Unwrap() []WrappedDataSource {
-	children := make([]WrappedDataSource, 0, len(f.dataSources))
-	for _, d := range f.dataSources {
-		children = append(children, d)
-	}
-	return children
-}
-
-type WrappedDataSource interface {
-	Type() string
-	Unwrap() []WrappedDataSource
-}
-
-type DataSource[Q, R any] interface {
-	Type() string
-
-	Fetch(Q) R
-
-	Unwrap() []WrappedDataSource
-}
-
-type BatchDataSource[Q, R any] interface {
-	DataSource[Q, R]
-
-	AppendQuery(id int, current any, base any) any
-
-	FetchBatch(any) map[int]R
-}
-
-type AppleDataSource struct {
-	BatchDataSource[int, []int]
-
-	numbersToReturn []int
-
-	results chan []int
-}
-
-func NewFruitDataSource(numbers []int) AppleDataSource {
-	return AppleDataSource{numbersToReturn: numbers}
-}
-
-func (a AppleDataSource) Type() string {
-	return "Apple"
-}
-
-func (a AppleDataSource) Fetch(q int) []int {
-	return <-a.results
-}
-
-func (a AppleDataSource) AppendQuery(id int, current map[int][]int) (map[int][]int, chan []int) {
-	if current == nil {
-		return map[int][]int{
-			id: a.numbersToReturn,
-		}, a.results
-	}
-	current[id] = a.numbersToReturn
-	return current, a.results
-}
-
-func (a AppleDataSource) FetchBatch(q map[int][]int) map[int][]int {
-	return q
-}
-
-func (a AppleDataSource) Unwrap() []WrappedDataSource {
-	return []WrappedDataSource{}
-}
-
-type StackedDataSource[Q1, R1, R2 any] struct {
-	DataSource[Q1, R2]
-
-	ds1 DataSource[Q1, R1]
-
-	ds2 DataSource[R1, R2]
-}
-
-func NewStackedDataSource[Q1, R1, R2 any](ds1 DataSource[Q1, R1], ds2 DataSource[R1, R2]) DataSource[Q1, R2] {
-	return StackedDataSource[Q1, R1, R2]{
-		ds1: ds1,
-		ds2: ds2,
+func (r Resolver[T, U]) fetch(arg T) ResolvableValue[U] {
+	return ResolvableValue[U]{
+		key: r.id,
+		arg: arg,
 	}
 }
 
-func (s StackedDataSource[Q1, R1, R2]) Type() string {
-	return "StackedDataSource"
+type ResolvableValue[U any] struct {
+	Node[U]
+
+	key string
+	arg any
 }
 
-func (s StackedDataSource[Q1, R1, R2]) Fetch(q1 Q1) R2 {
-	r1 := s.ds1.Fetch(q1)
-	return s.ds2.Fetch(r1)
+func (r ResolvableValue[U]) Key() string {
+	return r.key
 }
 
-func (s StackedDataSource[Q1, R1, R2]) Unwrap() []WrappedDataSource {
-	return []WrappedDataSource{s.ds1, s.ds2}
+type Transform[T, U any] interface {
+	Apply(T) U
 }
 
-type TransformResultDataSource[Q, R1, R2 any] struct {
-	DataSource[Q, R2]
-
-	baseDataSource DataSource[Q, R1]
-
-	transformer func(r1 R1) R2
+type Node[T any] interface {
+	AnyNode
+	GetValue() T
 }
 
-func TransformDataSourceResult[Q, R1, R2 any](ds DataSource[Q, R1], fn func(R1) R2) DataSource[Q, R2] {
-	return TransformResultDataSource[Q, R1, R2]{
-		baseDataSource: ds,
-		transformer:    fn,
+type Resolvable[T any] interface {
+	Node[T]
+
+	Key() string
+}
+
+// type FlatMapNode[T, U any] struct {
+// 	base Node[T]
+// 	fn   func(Node[T]) Node[U]
+// }
+
+/*
+type MapNode[T any, U any] struct {
+	node Node[T]
+	fn   func(T) U
+}
+
+func MapNode[T, U any](node Node[T], fn func(T) U) Node[U] {
+	return MapNode[T, U]{
+		node: node,
+		fn:   fn,
 	}
 }
+*/
 
-func (t TransformResultDataSource[Q, R1, R2]) Type() string {
-	return "TransformResult"
-}
-
-func (t TransformResultDataSource[Q, R1, R2]) Fetch(q Q) R2 {
-	return t.transformer(t.baseDataSource.Fetch(q))
-}
-
-func (t TransformResultDataSource[Q, R1, R2]) Unwrap() []WrappedDataSource {
-	return []WrappedDataSource{t.baseDataSource}
-}
-
-type Orange struct{}
-
-type OrangeDataSource struct{}
-
-func (o OrangeDataSource) Type() string {
-	return "Orange"
-}
-
-func (o OrangeDataSource) Fetch(q int) []Orange {
-	result := []Orange{}
-	for i := 0; i < q; i++ {
-		result = append(result, Orange{})
-	}
-	return result
+type nodeSentinal struct{}
+type NodeResult interface {
+	NodeResultMustBePartOfYourResultStruct(nodeSentinal)
 }
