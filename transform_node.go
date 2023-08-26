@@ -2,7 +2,6 @@ package main
 
 type TransformNode[T, U any] interface {
 	Node[U]
-	AnyNode
 }
 
 type transformNodeImpl[T, U any] struct {

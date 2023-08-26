@@ -6,6 +6,7 @@ type TaskManager struct {
 	counter      int
 	tasks        map[int]AnyNode
 	dependencies map[int]map[int]struct{}
+	hasRun       map[int]bool
 	rootTask     AnyNode
 }
 
@@ -13,6 +14,7 @@ func NewTaskManager(rootTask AnyNode) *TaskManager {
 	tm := &TaskManager{
 		tasks:        map[int]AnyNode{},
 		dependencies: map[int]map[int]struct{}{},
+		hasRun:       map[int]bool{},
 		rootTask:     rootTask,
 	}
 
@@ -39,6 +41,7 @@ func (t *TaskManager) AddDependency(parentID, childID int) {
 }
 
 func (t *TaskManager) FinishTask(id int) []int {
+	t.hasRun[id] = true
 	unblockedTasks := []int{}
 
 	for parentTaskID, childTasks := range t.dependencies {
@@ -58,10 +61,16 @@ func (t *TaskManager) GetRunnableTasksIDs() []int {
 	result := []int{}
 
 	for id := range t.tasks {
-		result = append(result, id)
+		if len(t.dependencies[id]) == 0 && !t.hasRun[id] {
+			result = append(result, id)
+		}
 	}
 
 	return result
+}
+
+func (t *TaskManager) GetRootTask() AnyNode {
+	return t.rootTask
 }
 
 type NodeParentPair struct {
