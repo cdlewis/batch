@@ -9,18 +9,18 @@ type ListNode[T any] interface {
 
 type listNodeImpl[T any] struct {
 	isResolved bool
-	children   []AnyNode
-	results    []any
+	children   []Node[T]
+	results    []T
 }
 
-func NewListNode[T any](children []AnyNode) ListNode[T] {
+func NewListNode[T any](children []Node[T]) ListNode[T] {
 	return &listNodeImpl[T]{
 		children: children,
 	}
 }
 
 func (l *listNodeImpl[T]) GetValue() []T {
-	return []T{}
+	return l.results
 }
 
 func (l *listNodeImpl[T]) IsResolved() bool {
@@ -28,15 +28,19 @@ func (l *listNodeImpl[T]) IsResolved() bool {
 }
 
 func (l *listNodeImpl[T]) GetAnyResolvables() []AnyNode {
-	return l.children
+	results := make([]AnyNode, 0, len(l.children))
+	for _, i := range l.children {
+		results = append(results, i.(AnyNode))
+	}
+	return results
 }
 
 func (l *listNodeImpl[T]) Run() any {
-	results := make([]any, 0, len(l.children))
+	results := make([]T, 0, len(l.children))
 	fmt.Println("\t children", l.children)
 	for _, c := range l.children {
-		fmt.Println("\t list child result", c.Result())
-		results = append(results, c.Result())
+		fmt.Println("\t list child result", c.GetValue())
+		results = append(results, c.GetValue())
 	}
 	l.results = results
 	return results

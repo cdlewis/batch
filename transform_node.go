@@ -18,8 +18,7 @@ func NewTransformNode[T, U any](node Node[T], transformer func(T) U) TransformNo
 	return &transformNodeImpl[T, U]{
 		child: node,
 		fn: func(arg any) any {
-			fmt.Println("<<<< adapter running")
-			return transformer(arg.(T))
+			return transformer(node.GetValue())
 		},
 	}
 }
@@ -33,7 +32,6 @@ func (l *transformNodeImpl[T, U]) IsResolved() bool {
 }
 
 func (l *transformNodeImpl[T, U]) GetAnyResolvables() []AnyNode {
-	fmt.Println("@@@ res")
 	return []AnyNode{l.child}
 }
 

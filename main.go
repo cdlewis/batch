@@ -23,16 +23,16 @@ func main() {
 	// firstUser := userResolver.fetch("chris")
 	// secondUser := userResolver.fetch("mike")
 	users := NewTransformNode[[]string, string](
-		NewListNode[string]([]AnyNode{
+		NewListNode([]Node[string]{
 			NewValueNode("Chris"),
 			NewValueNode("Mike"),
 		}),
 		func(results []string) string {
-			fmt.Println("trans running")
 			result := ""
 			for _, i := range results {
-				result += i + ","
+				result += (i + ",")
 			}
+			fmt.Println("trans running", results)
 			return result
 		},
 	)
@@ -46,15 +46,13 @@ type ExploreNextJob struct {
 }
 
 func resolve[T any](node AnyNode) T {
-	counter := 0
-	tasks := map[int]AnyNode{}
-	blocked := map[int][]int{}
+	taskManager := NewTaskManager()
 
 	runNext := []int{}
 
 	exploreNext := []ExploreNextJob{
 		{
-			ParentID: 0,
+			ParentID: -1,
 			Node:     node,
 		},
 	}
@@ -63,62 +61,48 @@ func resolve[T any](node AnyNode) T {
 		fmt.Println("Exploring", nextNode)
 		exploreNext = exploreNext[1:]
 
-		counter++
-		tasks[counter] = nextNode.Node
+		currentNodeID := taskManager.AddTask(nextNode.Node)
 
-		if nextNode.ParentID != 0 {
-			blocked[nextNode.ParentID] = append(blocked[nextNode.ParentID], counter)
+		if nextNode.ParentID != -1 {
+			taskManager.AddDependency(nextNode.ParentID, currentNodeID)
 		}
 
 		blockingWork := nextNode.Node.GetAnyResolvables()
 		if len(blockingWork) == 0 {
-			runNext = append(runNext, counter)
+			runNext = append(runNext, currentNodeID)
 			continue
 		}
 
 		for _, w := range blockingWork {
 			exploreNext = append(exploreNext, ExploreNextJob{
-				ParentID: counter,
+				ParentID: currentNodeID,
 				Node:     w,
 			})
 		}
 	}
-	fmt.Println("task list", tasks)
 
+	fmt.Println(taskManager)
 	for len(runNext) > 0 {
 		nextRunNext := []int{}
 
 		for len(runNext) > 0 {
 			taskID := runNext[0]
 			runNext = runNext[1:]
-
-			result := tasks[taskID].Run()
-			fmt.Println(taskID, "completed with", result)
-
-			// inject the result into each blocked task and see if it can be run now
-			for blockedTaskID, blockingTasks := range blocked {
-				canRun := true
-				for _, t := range blockingTasks {
-					if t != taskID {
-						if !tasks[t].IsResolved() {
-							canRun = false
-						}
-						continue
-					}
-					fmt.Println("Found", taskID, "blocks", blockedTaskID)
-				}
-
-				if canRun {
-					nextRunNext = append(nextRunNext, blockedTaskID)
-				}
+			fmt.Println(taskID)
+			currentTask := taskManager.GetTask(taskID)
+			if !currentTask.IsResolved() {
+				currentTask.Run()
 			}
+			fmt.Println(taskID, "completed with", currentTask.Result())
+
+			unblockedTasks := taskManager.FinishTask(taskID)
+			nextRunNext = append(nextRunNext, unblockedTasks...)
 		}
 
 		runNext = nextRunNext
 	}
 
-	fmt.Println(tasks)
-	return tasks[1].Result().(T)
+	return taskManager.GetTask(1).Result().(T)
 }
 
 type AnyNode interface {
