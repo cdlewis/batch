@@ -11,8 +11,18 @@ func main() {
 
 	users := NewTransformNode[[]User, string](
 		NewListNode([]Node[User]{
-			userService.Fetch(0),
-			userService.Fetch(1),
+			NewFlatMapNode(
+				userService.Fetch(0),
+				func(result User) Node[User] {
+					return userService.Fetch(1)
+				},
+			),
+			NewFlatMapNode(
+				userService.Fetch(1),
+				func(result User) Node[User] {
+					return userService.Fetch(2)
+				},
+			),
 			userService.Fetch(2),
 		}),
 		func(results []User) string {

@@ -31,6 +31,7 @@ func (u UserResolver) Resolve(nodeIDs []int, taskManager *TaskManager) {
 		}
 
 		node.InjectResult(result)
+		fmt.Println("FINISHED", id)
 		taskManager.FinishTask(id)
 	}
 }
@@ -78,4 +79,5 @@ func (v *customNode) ResolverID() string {
 
 func (v *customNode) InjectResult(user User) {
 	v.value = user
+	v.isResolved = true
 }

@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
+
+const _parentIDNotParent = -1
 
 type TaskManager struct {
 	counter      int
@@ -18,7 +22,7 @@ func NewTaskManager(rootTask AnyNode) *TaskManager {
 		rootTask:     rootTask,
 	}
 
-	tm.exploreTaskGraph()
+	tm.exploreTaskGraph(rootTask, _parentIDNotParent)
 
 	return tm
 }
@@ -27,6 +31,10 @@ func (t *TaskManager) AddTask(node AnyNode) int {
 	t.counter++
 	t.tasks[t.counter] = node
 	return t.counter
+}
+
+func (t *TaskManager) UpdateTask(id int, node AnyNode) int {
+	return t.exploreTaskGraph(node, id)
 }
 
 func (t *TaskManager) GetTask(id int) AnyNode {
@@ -73,16 +81,23 @@ func (t *TaskManager) GetRootTask() AnyNode {
 	return t.rootTask
 }
 
+func (t *TaskManager) PrintDependencyTree() {
+	for nodeID, deps := range t.dependencies {
+		fmt.Println(nodeID, deps)
+	}
+}
+
 type NodeParentPair struct {
 	ParentID int
 	Node     AnyNode
 }
 
-func (t *TaskManager) exploreTaskGraph() {
+func (t *TaskManager) exploreTaskGraph(root AnyNode, parentID int) int {
+	newRoot := -1
 	stack := []NodeParentPair{
 		{
-			ParentID: -1,
-			Node:     t.rootTask,
+			ParentID: parentID,
+			Node:     root,
 		},
 	}
 
@@ -98,6 +113,7 @@ func (t *TaskManager) exploreTaskGraph() {
 			currentNodeID := t.AddTask(nextNode.Node)
 
 			if nextNode.ParentID != -1 {
+				newRoot = currentNodeID
 				t.AddDependency(nextNode.ParentID, currentNodeID)
 			}
 
@@ -112,4 +128,6 @@ func (t *TaskManager) exploreTaskGraph() {
 
 		stack = nextStack
 	}
+
+	return newRoot
 }
