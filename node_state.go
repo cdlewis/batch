@@ -30,6 +30,10 @@ func (n *nodeState) SetIsResolved(id int, state bool) {
 	n.resolved[id] = state
 }
 
+func (n *nodeState) GetResolvedValue(id int) any {
+	return n.resolvedValue[id]
+}
+
 func (n *nodeState) SetResolvedValue(id int, value any) {
 	n.resolvedValue[id] = value
 }

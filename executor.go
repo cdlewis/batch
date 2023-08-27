@@ -5,8 +5,11 @@ import (
 	"fmt"
 )
 
-func ExecuteGraph[T any](ctx context.Context, node AnyNode, resolvers map[string]Resolver) T {
-	taskManager := NewTaskManager(node)
+func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[string]Resolver) T {
+	ctx := ContextWithNodeState(parentCtx)
+
+	taskManager := NewTaskManager(ctx, node)
+	taskManager.PrintDependencyTree()
 
 	runNext := taskManager.GetRunnableTasksIDs()
 
@@ -24,28 +27,29 @@ func ExecuteGraph[T any](ctx context.Context, node AnyNode, resolvers map[string
 		}
 
 		for resolverID, taskIDs := range batchableTasks {
-			resolvers[resolverID].Resolve(taskIDs, taskManager)
+			resolvers[resolverID].Resolve(ctx, taskIDs, taskManager)
 		}
 
 		for _, taskID := range regularTasks {
 			currentTask := taskManager.GetTask(taskID)
+			fmt.Println("Getting current task", taskID, currentTask)
 
 			if flatMapNode, isFlatMap := currentTask.(AnyFlatMap); isFlatMap {
-				if flatMapNode.FlatMapFullyResolved() {
+				if flatMapNode.FlatMapFullyResolved(ctx, taskID) {
 					taskManager.FinishTask(taskID)
 					break
 				}
 				fmt.Println("Detected", taskID, "is flatmap")
-				newNode := currentTask.Run(ctx).(AnyNode)
+				newNode := currentTask.Run(ctx, taskID).(AnyNode)
 				fmt.Println("Re-running deps")
-				id := taskManager.UpdateTask(taskID, newNode)
+				id := taskManager.UpdateTask(ctx, taskID, newNode)
 				fmt.Println("new root task with", id)
 				taskManager.PrintDependencyTree()
 				continue
 			}
 
-			if !currentTask.IsResolved() {
-				currentTask.Run(ctx)
+			if !currentTask.IsResolved(ctx, taskID) {
+				currentTask.Run(ctx, taskID)
 			}
 
 			fmt.Println("!!!! FINISHED", taskID)
@@ -56,5 +60,5 @@ func ExecuteGraph[T any](ctx context.Context, node AnyNode, resolvers map[string
 		runNext = taskManager.GetRunnableTasksIDs()
 	}
 
-	return taskManager.GetRootTask().(Node[T]).GetValue()
+	return taskManager.GetRootTask().(Node[T]).GetValue(ctx, 1)
 }

@@ -10,7 +10,6 @@ type transformNodeImpl[T, U any] struct {
 	isResolved bool
 	child      Node[T]
 	fn         func(T) U
-	result     U
 }
 
 func NewTransformNode[T, U any](node Node[T], transformer func(T) U) TransformNode[T, U] {
@@ -21,11 +20,13 @@ func NewTransformNode[T, U any](node Node[T], transformer func(T) U) TransformNo
 }
 
 func (l *transformNodeImpl[T, U]) GetValue(ctx context.Context, id int) U {
-	return l.result
+	nodeState := NodeStateFromContext(ctx)
+	return nodeState.GetResolvedValue(id).(U)
 }
 
 func (l *transformNodeImpl[T, U]) IsResolved(ctx context.Context, id int) bool {
-	return l.isResolved
+	nodeState := NodeStateFromContext(ctx)
+	return nodeState.GetIsResolved(id)
 }
 
 func (l *transformNodeImpl[T, U]) GetAnyResolvables() []AnyNode {
@@ -41,5 +42,5 @@ func (l *transformNodeImpl[T, U]) Run(ctx context.Context, id int) any {
 	nodeState.SetResolvedValue(id, result)
 	nodeState.SetIsResolved(id, true)
 
-	return l.result
+	return result
 }

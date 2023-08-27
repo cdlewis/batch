@@ -1,7 +1,9 @@
 package main
 
+import "context"
+
 type Resolver interface {
 	ID() string
 
-	Resolve([]int, *TaskManager)
+	Resolve(context.Context, []int, *TaskManager)
 }

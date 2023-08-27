@@ -1,10 +1,13 @@
 package main
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type AnyFlatMap interface {
 	FlatMapSentinalFunction()
-	FlatMapFullyResolved() bool
+	FlatMapFullyResolved(context.Context, int) bool
 }
 
 type FlatMapNode[T, U any] interface {
@@ -13,10 +16,8 @@ type FlatMapNode[T, U any] interface {
 }
 
 type flatMapNodeImpl[T, U any] struct {
-	child      Node[T]
-	grandChild Node[U]
-	fn         func(T) Node[U]
-	isResolved bool
+	child Node[T]
+	fn    func(T) Node[U]
 }
 
 func NewFlatMapNode[T, U any](
@@ -29,33 +30,62 @@ func NewFlatMapNode[T, U any](
 	}
 }
 
-func (f *flatMapNodeImpl[T, U]) IsResolved() bool {
-	return f.isResolved
+func (f *flatMapNodeImpl[T, U]) IsResolved(ctx context.Context, id int) bool {
+	nodeState := NodeStateFromContext(ctx)
+	return nodeState.GetIsResolved(id)
 }
 
-func (f *flatMapNodeImpl[T, U]) Run(ctx context.Context) any {
-	f.grandChild = f.fn(f.child.GetValue())
-	return f.grandChild
-}
+func (f *flatMapNodeImpl[T, U]) Run(ctx context.Context, id int) any {
+	nodeState := NodeStateFromContext(ctx)
 
-func (f *flatMapNodeImpl[T, U]) GetValue() U {
-	if grandChild := f.grandChild; grandChild != nil {
-		return grandChild.GetValue()
+	if _, ok := nodeState.GetResolvedValue(id).(Node[U]); ok {
+		panic("Invariant violation: flatMap run multiple times")
 	}
 
-	panic("Unexpected access of node value")
+	children := nodeState.GetChildren(id)
+	fmt.Println("children", children)
+	result := f.fn(f.child.GetValue(ctx, children[0]))
+	nodeState.SetResolvedValue(id, result)
+
+	return result
+}
+
+func (f *flatMapNodeImpl[T, U]) GetValue(ctx context.Context, id int) U {
+	nodeState := NodeStateFromContext(ctx)
+
+	grandChild, ok := nodeState.GetResolvedValue(id).(Node[U])
+	if !ok {
+		panic("Invariant violation: node state does not contain a valid node")
+	}
+
+	children := nodeState.GetChildren(id)
+	if len(children) != 2 {
+		panic("Invariant violation: node should contain exactly two children")
+	}
+
+	return grandChild.GetValue(ctx, children[1])
 }
 
 func (f *flatMapNodeImpl[T, U]) GetAnyResolvables() []AnyNode {
 	return []AnyNode{f.child}
 }
 
-func (f *flatMapNodeImpl[T, U]) FlatMapFullyResolved() bool {
-	if grandChild := f.grandChild; grandChild != nil {
-		return grandChild.IsResolved()
+func (f *flatMapNodeImpl[T, U]) FlatMapFullyResolved(ctx context.Context, id int) bool {
+	nodeState := NodeStateFromContext(ctx)
+
+	grandChild, ok := nodeState.GetResolvedValue(id).(Node[U])
+	fmt.Println("@@", grandChild, ok)
+	if !ok {
+		return false
 	}
 
-	return false
+	children := nodeState.GetChildren(id)
+	fmt.Println("children", children)
+	if len(children) != 2 {
+		return false
+	}
+
+	return grandChild.IsResolved(ctx, children[1])
 }
 
 func (f *flatMapNodeImpl[T, U]) FlatMapSentinalFunction() {

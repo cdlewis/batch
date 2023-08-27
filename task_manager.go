@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -14,7 +15,7 @@ type TaskManager struct {
 	rootTask     AnyNode
 }
 
-func NewTaskManager(rootTask AnyNode) *TaskManager {
+func NewTaskManager(ctx context.Context, rootTask AnyNode) *TaskManager {
 	tm := &TaskManager{
 		tasks:        map[int]AnyNode{},
 		dependencies: map[int]map[int]struct{}{},
@@ -22,19 +23,13 @@ func NewTaskManager(rootTask AnyNode) *TaskManager {
 		rootTask:     rootTask,
 	}
 
-	tm.exploreTaskGraph(rootTask, _parentIDNotParent)
+	tm.exploreTaskGraph(ctx, rootTask, _parentIDNotParent)
 
 	return tm
 }
 
-func (t *TaskManager) AddTask(node AnyNode) int {
-	t.counter++
-	t.tasks[t.counter] = node
-	return t.counter
-}
-
-func (t *TaskManager) UpdateTask(id int, node AnyNode) int {
-	return t.exploreTaskGraph(node, id)
+func (t *TaskManager) UpdateTask(ctx context.Context, id int, node AnyNode) int {
+	return t.exploreTaskGraph(ctx, node, id)
 }
 
 func (t *TaskManager) GetTask(id int) AnyNode {
@@ -82,23 +77,39 @@ func (t *TaskManager) GetRootTask() AnyNode {
 }
 
 func (t *TaskManager) PrintDependencyTree() {
+	fmt.Println("Tasks")
+	for taskID, task := range t.tasks {
+		fmt.Println("\t", taskID, task)
+	}
+	fmt.Println()
+	fmt.Println("Dependency tree:")
 	for nodeID, deps := range t.dependencies {
-		fmt.Println(nodeID, deps)
+		fmt.Println("\t", nodeID, deps)
 	}
 }
 
 type NodeParentPair struct {
+	NodeID   int
 	ParentID int
 	Node     AnyNode
 }
 
-func (t *TaskManager) exploreTaskGraph(root AnyNode, parentID int) int {
-	newRoot := -1
+func (t *TaskManager) exploreTaskGraph(ctx context.Context, root AnyNode, parentID int) int {
+	nodeState := NodeStateFromContext(ctx)
+
+	t.counter++
+	newRoot := t.counter
 	stack := []NodeParentPair{
 		{
+			NodeID:   newRoot,
 			ParentID: parentID,
 			Node:     root,
 		},
+	}
+	t.tasks[newRoot] = root
+
+	if parentID != _parentIDNotParent {
+		nodeState.AddChildren(parentID, []int{newRoot})
 	}
 
 	for len(stack) > 0 {
@@ -110,20 +121,29 @@ func (t *TaskManager) exploreTaskGraph(root AnyNode, parentID int) int {
 
 			fmt.Println("Exploring", nextNode)
 
-			currentNodeID := t.AddTask(nextNode.Node)
-
 			if nextNode.ParentID != -1 {
-				newRoot = currentNodeID
-				t.AddDependency(nextNode.ParentID, currentNodeID)
+				newRoot = nextNode.NodeID
+				t.AddDependency(nextNode.ParentID, nextNode.NodeID)
 			}
 
-			blockingWork := nextNode.Node.GetAnyResolvables()
-			for _, w := range blockingWork {
+			children := nextNode.Node.GetAnyResolvables()
+			childNodeIDs := make([]int, 0, len(children))
+			for _, w := range children {
+				t.counter++
+				id := t.counter
+				t.tasks[id] = w
+
 				nextStack = append(nextStack, NodeParentPair{
-					ParentID: currentNodeID,
+					ParentID: nextNode.NodeID,
+					NodeID:   id,
 					Node:     w,
 				})
+
+				childNodeIDs = append(childNodeIDs, id)
 			}
+
+			fmt.Println("Adding children", nextNode.NodeID, childNodeIDs)
+			nodeState.AddChildren(nextNode.NodeID, childNodeIDs)
 		}
 
 		stack = nextStack
