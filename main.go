@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -37,6 +38,7 @@ func main() {
 	)
 
 	result := ExecuteGraph[string](
+		context.Background(),
 		users,
 		map[string]Resolver{
 			userResolver.ID(): userResolver,

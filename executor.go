@@ -1,8 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
-func ExecuteGraph[T any](node AnyNode, resolvers map[string]Resolver) T {
+func ExecuteGraph[T any](ctx context.Context, node AnyNode, resolvers map[string]Resolver) T {
 	taskManager := NewTaskManager(node)
 
 	runNext := taskManager.GetRunnableTasksIDs()
@@ -33,7 +36,7 @@ func ExecuteGraph[T any](node AnyNode, resolvers map[string]Resolver) T {
 					break
 				}
 				fmt.Println("Detected", taskID, "is flatmap")
-				newNode := currentTask.Run().(AnyNode)
+				newNode := currentTask.Run(ctx).(AnyNode)
 				fmt.Println("Re-running deps")
 				id := taskManager.UpdateTask(taskID, newNode)
 				fmt.Println("new root task with", id)
@@ -42,7 +45,7 @@ func ExecuteGraph[T any](node AnyNode, resolvers map[string]Resolver) T {
 			}
 
 			if !currentTask.IsResolved() {
-				currentTask.Run()
+				currentTask.Run(ctx)
 			}
 
 			fmt.Println("!!!! FINISHED", taskID)

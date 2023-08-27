@@ -1,5 +1,7 @@
 package main
 
+import "context"
+
 type ValueNode[T any] struct {
 	Node[T]
 
@@ -22,6 +24,6 @@ func (v *ValueNode[T]) GetAnyResolvables() []AnyNode {
 	return []AnyNode{}
 }
 
-func (v *ValueNode[T]) Run() any {
+func (v *ValueNode[T]) Run(_ context.Context) any {
 	return v.value
 }

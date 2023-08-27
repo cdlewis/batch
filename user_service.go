@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 const UserResolverID = "UserService"
 
@@ -69,7 +72,7 @@ func (v *customNode) GetAnyResolvables() []AnyNode {
 	return []AnyNode{}
 }
 
-func (v *customNode) Run() any {
+func (v *customNode) Run(_ context.Context) any {
 	panic("we should batch this -- you screwed up")
 }
 

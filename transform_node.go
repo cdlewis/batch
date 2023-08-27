@@ -1,5 +1,7 @@
 package main
 
+import "context"
+
 type TransformNode[T, U any] interface {
 	Node[U]
 }
@@ -30,7 +32,7 @@ func (l *transformNodeImpl[T, U]) GetAnyResolvables() []AnyNode {
 	return []AnyNode{l.child}
 }
 
-func (l *transformNodeImpl[T, U]) Run() any {
+func (l *transformNodeImpl[T, U]) Run(ctx context.Context) any {
 	l.result = l.fn(l.child.GetValue())
 	l.isResolved = true
 	return l.result

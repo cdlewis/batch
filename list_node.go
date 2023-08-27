@@ -1,5 +1,7 @@
 package main
 
+import "context"
+
 type ListNode[T any] interface {
 	Node[[]T]
 	AnyNode
@@ -33,7 +35,7 @@ func (l *listNodeImpl[T]) GetAnyResolvables() []AnyNode {
 	return results
 }
 
-func (l *listNodeImpl[T]) Run() any {
+func (l *listNodeImpl[T]) Run(ctx context.Context) any {
 	results := make([]T, 0, len(l.children))
 	for _, c := range l.children {
 		results = append(results, c.GetValue())

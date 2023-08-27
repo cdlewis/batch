@@ -1,5 +1,7 @@
 package main
 
+import "context"
+
 type AnyFlatMap interface {
 	FlatMapSentinalFunction()
 	FlatMapFullyResolved() bool
@@ -31,7 +33,7 @@ func (f *flatMapNodeImpl[T, U]) IsResolved() bool {
 	return f.isResolved
 }
 
-func (f *flatMapNodeImpl[T, U]) Run() any {
+func (f *flatMapNodeImpl[T, U]) Run(ctx context.Context) any {
 	f.grandChild = f.fn(f.child.GetValue())
 	return f.grandChild
 }
