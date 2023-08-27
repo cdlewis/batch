@@ -3,15 +3,15 @@ package main
 import "context"
 
 type AnyNode interface {
-	IsResolved() bool
+	IsResolved(context.Context, int) bool
 	GetAnyResolvables() []AnyNode
-	Run(context.Context) any
+	Run(context.Context, int) any
 }
 
 type Node[T any] interface {
 	AnyNode
 
-	GetValue() T
+	GetValue(context.Context, int) T
 }
 
 type BatchableNode interface {

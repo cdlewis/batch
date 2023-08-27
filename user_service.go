@@ -23,7 +23,7 @@ func (u UserResolver) ID() string {
 	return UserResolverID
 }
 
-func (u UserResolver) Resolve(nodeIDs []int, taskManager *TaskManager) {
+func (u UserResolver) Resolve(ctx context.Context, nodeIDs []int, taskManager *TaskManager) {
 	fmt.Println("Detected", len(nodeIDs), "queries to the same service")
 	for _, id := range nodeIDs {
 		node := taskManager.GetTask(id).(*customNode)
@@ -60,11 +60,11 @@ func newCustomNode(userID int) Node[User] {
 	return &customNode{userID: userID}
 }
 
-func (v *customNode) GetValue() User {
+func (v *customNode) GetValue(ctx context.Context, id int) User {
 	return v.value
 }
 
-func (v *customNode) IsResolved() bool {
+func (v *customNode) IsResolved(ctx context.Context, id int) bool {
 	return v.isResolved
 }
 
@@ -72,7 +72,7 @@ func (v *customNode) GetAnyResolvables() []AnyNode {
 	return []AnyNode{}
 }
 
-func (v *customNode) Run(_ context.Context) any {
+func (v *customNode) Run(_ context.Context, id int) any {
 	panic("we should batch this -- you screwed up")
 }
 

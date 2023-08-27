@@ -12,11 +12,11 @@ func NewValueNode[T any](value T) Node[T] {
 	return &ValueNode[T]{value: value}
 }
 
-func (v *ValueNode[T]) GetValue() T {
+func (v *ValueNode[T]) GetValue(_ context.Context, _ int) T {
 	return v.value
 }
 
-func (v *ValueNode[T]) IsResolved() bool {
+func (v *ValueNode[T]) IsResolved(_ context.Context, _ int) bool {
 	return true
 }
 
@@ -24,6 +24,6 @@ func (v *ValueNode[T]) GetAnyResolvables() []AnyNode {
 	return []AnyNode{}
 }
 
-func (v *ValueNode[T]) Run(_ context.Context) any {
+func (v *ValueNode[T]) Run(_ context.Context, _ int) any {
 	return v.value
 }
