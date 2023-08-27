@@ -8,12 +8,14 @@ import (
 var nodeStateKey struct{}
 
 func ContextWithNodeState(ctx context.Context) context.Context {
-	return context.WithValue(ctx, nodeStateKey, &nodeState{
+	nodeState := &nodeState{
 		resolved:      map[int]bool{},
 		resolvedValue: map[int]any{},
 		children:      map[int][]int{},
 		mutex:         sync.RWMutex{},
-	})
+	}
+
+	return context.WithValue(ctx, nodeStateKey, nodeState)
 }
 
 func NodeStateFromContext(ctx context.Context) *nodeState {

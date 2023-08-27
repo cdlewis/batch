@@ -10,7 +10,6 @@ import (
 
 func main() {
 	userService := UserService{}
-	userResolver := UserResolver{}
 
 	users := panera.NewTransformNode[[]User, string](
 		panera.NewListNode([]panera.Node[User]{
@@ -43,7 +42,7 @@ func main() {
 		context.Background(),
 		users,
 		map[string]panera.Resolver{
-			userResolver.ID(): userResolver,
+			userService.ID(): userService,
 		},
 	)
 

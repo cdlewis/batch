@@ -2,6 +2,7 @@ package panera
 
 import (
 	"context"
+	"fmt"
 )
 
 func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[string]Resolver) T {
@@ -27,13 +28,19 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 			runnableTasks := taskManager.GetRunnableTasksIDs()
 
 			// Group tasks into batch and non-batch
-
-			batchableTasks := map[string][]int{}
+			batchableTasks := map[int]AnyBatchQueryNode{}
+			batchableQueries := map[string]map[int]any{}
 			regularTasks := []int{}
 			for _, id := range runnableTasks {
 				node := taskManager.GetTask(id)
-				if bachTask, ok := node.(BatchableNode); ok {
-					batchableTasks[bachTask.ResolverID()] = append(batchableTasks[bachTask.ResolverID()], id)
+				if batchTask, ok := node.(AnyBatchQueryNode); ok {
+					resolverID := batchTask.ResolverID()
+					if batchableQueries[resolverID] == nil {
+						batchableQueries[resolverID] = map[int]any{}
+					}
+
+					batchableTasks[id] = batchTask
+					batchableQueries[resolverID][id] = batchTask.BuildQuery(ctx)
 				} else {
 					regularTasks = append(regularTasks, id)
 				}
@@ -41,10 +48,16 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 
 			// Kick off async resolvers for the batch tasks
 
-			for resolverID, taskIDs := range batchableTasks {
-				resolverID, taskIDs := resolverID, taskIDs
+			for resolverID, taskMap := range batchableQueries {
+				resolverID, taskMap := resolverID, taskMap
 				go func() {
-					resolvers[resolverID].Resolve(ctx, taskIDs, taskManager)
+					resultsMap := resolvers[resolverID].Resolve(ctx, taskMap)
+					for id, result := range resultsMap {
+						fmt.Println("Resolve", id, result)
+						batchableTasks[id].SetResult(ctx, id, result)
+						taskManager.FinishTask(id)
+					}
+
 					taskResolved <- struct{}{}
 				}()
 			}

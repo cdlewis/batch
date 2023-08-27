@@ -13,9 +13,3 @@ type Node[T any] interface {
 
 	GetValue(context.Context, int) T
 }
-
-type BatchableNode interface {
-	AnyNode
-
-	ResolverID() string
-}

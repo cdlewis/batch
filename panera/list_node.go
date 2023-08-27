@@ -6,7 +6,6 @@ import (
 
 type ListNode[T any] interface {
 	Node[[]T]
-	AnyNode
 }
 
 type listNodeImpl[T any] struct {
