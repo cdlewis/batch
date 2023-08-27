@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 const _parentIDNotParent = -1
@@ -13,6 +14,7 @@ type TaskManager struct {
 	dependencies map[int]map[int]struct{}
 	hasRun       map[int]bool
 	rootTask     AnyNode
+	mutex        sync.RWMutex
 }
 
 func NewTaskManager(ctx context.Context, rootTask AnyNode) *TaskManager {
@@ -21,6 +23,7 @@ func NewTaskManager(ctx context.Context, rootTask AnyNode) *TaskManager {
 		dependencies: map[int]map[int]struct{}{},
 		hasRun:       map[int]bool{},
 		rootTask:     rootTask,
+		mutex:        sync.RWMutex{},
 	}
 
 	tm.exploreTaskGraph(ctx, rootTask, _parentIDNotParent)
@@ -29,21 +32,23 @@ func NewTaskManager(ctx context.Context, rootTask AnyNode) *TaskManager {
 }
 
 func (t *TaskManager) UpdateTask(ctx context.Context, id int, node AnyNode) int {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	return t.exploreTaskGraph(ctx, node, id)
 }
 
 func (t *TaskManager) GetTask(id int) AnyNode {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
+
 	return t.tasks[id]
 }
 
-func (t *TaskManager) AddDependency(parentID, childID int) {
-	if t.dependencies[parentID] == nil {
-		t.dependencies[parentID] = map[int]struct{}{}
-	}
-	t.dependencies[parentID][childID] = struct{}{}
-}
-
 func (t *TaskManager) FinishTask(id int) []int {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	t.hasRun[id] = true
 	unblockedTasks := []int{}
 
@@ -61,6 +66,9 @@ func (t *TaskManager) FinishTask(id int) []int {
 }
 
 func (t *TaskManager) GetRunnableTasksIDs() []int {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
+
 	result := []int{}
 
 	for id := range t.tasks {
@@ -77,6 +85,9 @@ func (t *TaskManager) GetRootTask() AnyNode {
 }
 
 func (t *TaskManager) PrintDependencyTree() {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
+
 	fmt.Println("Tasks")
 	for taskID, task := range t.tasks {
 		fmt.Println("\t", taskID, task)
@@ -86,6 +97,13 @@ func (t *TaskManager) PrintDependencyTree() {
 	for nodeID, deps := range t.dependencies {
 		fmt.Println("\t", nodeID, deps)
 	}
+}
+
+func (t *TaskManager) addDependency(parentID, childID int) {
+	if t.dependencies[parentID] == nil {
+		t.dependencies[parentID] = map[int]struct{}{}
+	}
+	t.dependencies[parentID][childID] = struct{}{}
 }
 
 type NodeParentPair struct {
@@ -123,7 +141,7 @@ func (t *TaskManager) exploreTaskGraph(ctx context.Context, root AnyNode, parent
 
 			if nextNode.ParentID != -1 {
 				newRoot = nextNode.NodeID
-				t.AddDependency(nextNode.ParentID, nextNode.NodeID)
+				t.addDependency(nextNode.ParentID, nextNode.NodeID)
 			}
 
 			children := nextNode.Node.GetAnyResolvables()
