@@ -1,9 +1,9 @@
-package main
+package panera
 
 import "context"
 
 type Resolver interface {
 	ID() string
 
-	Resolve(context.Context, []int, *TaskManager)
+	Resolve(context.Context, []int, TaskManager)
 }

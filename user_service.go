@@ -1,6 +1,7 @@
 package main
 
 import (
+	"batch/panera"
 	"context"
 	"fmt"
 )
@@ -16,14 +17,14 @@ var users = []string{
 }
 
 type UserResolver struct {
-	Resolver
+	panera.Resolver
 }
 
 func (u UserResolver) ID() string {
 	return UserResolverID
 }
 
-func (u UserResolver) Resolve(ctx context.Context, nodeIDs []int, taskManager *TaskManager) {
+func (u UserResolver) Resolve(ctx context.Context, nodeIDs []int, taskManager panera.TaskManager) {
 	fmt.Println("Detected", len(nodeIDs), "queries to the same service")
 	for _, id := range nodeIDs {
 		node := taskManager.GetTask(id).(*customNode)
@@ -34,7 +35,6 @@ func (u UserResolver) Resolve(ctx context.Context, nodeIDs []int, taskManager *T
 		}
 
 		node.InjectResult(result)
-		fmt.Println("FINISHED", id)
 		taskManager.FinishTask(id)
 	}
 }
@@ -44,19 +44,19 @@ type User struct {
 	Name string
 }
 
-func (u UserService) Fetch(id int) Node[User] {
+func (u UserService) Fetch(id int) panera.Node[User] {
 	return newCustomNode(id)
 }
 
 type customNode struct {
-	BatchableNode
+	panera.BatchableNode
 
 	userID     int
 	isResolved bool
 	value      User
 }
 
-func newCustomNode(userID int) Node[User] {
+func newCustomNode(userID int) panera.Node[User] {
 	return &customNode{userID: userID}
 }
 
@@ -68,8 +68,8 @@ func (v *customNode) IsResolved(ctx context.Context, id int) bool {
 	return v.isResolved
 }
 
-func (v *customNode) GetAnyResolvables() []AnyNode {
-	return []AnyNode{}
+func (v *customNode) GetChildren() []panera.AnyNode {
+	return []panera.AnyNode{}
 }
 
 func (v *customNode) Run(_ context.Context, id int) any {

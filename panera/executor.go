@@ -1,4 +1,4 @@
-package main
+package panera
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 		for range taskResolved {
 
 			// Can we terminate?
-			if taskManager.rootTask.IsResolved(ctx, 1) {
+			if taskManager.GetRootTask().IsResolved(ctx, 1) {
 				done <- true
 			}
 

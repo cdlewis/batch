@@ -1,12 +1,10 @@
-package main
+package panera
 
 import (
 	"context"
-	"fmt"
 )
 
 type AnyFlatMap interface {
-	FlatMapSentinalFunction()
 	FlatMapFullyResolved(context.Context, int) bool
 }
 
@@ -43,7 +41,6 @@ func (f *flatMapNodeImpl[T, U]) Run(ctx context.Context, id int) any {
 	}
 
 	children := nodeState.GetChildren(id)
-	fmt.Println("children", children)
 	result := f.fn(f.child.GetValue(ctx, children[0]))
 	nodeState.SetResolvedValue(id, result)
 
@@ -66,7 +63,7 @@ func (f *flatMapNodeImpl[T, U]) GetValue(ctx context.Context, id int) U {
 	return grandChild.GetValue(ctx, children[1])
 }
 
-func (f *flatMapNodeImpl[T, U]) GetAnyResolvables() []AnyNode {
+func (f *flatMapNodeImpl[T, U]) GetChildren() []AnyNode {
 	return []AnyNode{f.child}
 }
 
@@ -74,20 +71,14 @@ func (f *flatMapNodeImpl[T, U]) FlatMapFullyResolved(ctx context.Context, id int
 	nodeState := NodeStateFromContext(ctx)
 
 	grandChild, ok := nodeState.GetResolvedValue(id).(Node[U])
-	fmt.Println("@@", grandChild, ok)
 	if !ok {
 		return false
 	}
 
 	children := nodeState.GetChildren(id)
-	fmt.Println("children", children)
 	if len(children) != 2 {
 		return false
 	}
 
 	return grandChild.IsResolved(ctx, children[1])
-}
-
-func (f *flatMapNodeImpl[T, U]) FlatMapSentinalFunction() {
-	return
 }

@@ -1,4 +1,4 @@
-package main
+package panera
 
 import "context"
 
@@ -20,7 +20,7 @@ func (v *ValueNode[T]) IsResolved(_ context.Context, _ int) bool {
 	return true
 }
 
-func (v *ValueNode[T]) GetAnyResolvables() []AnyNode {
+func (v *ValueNode[T]) GetChildren() []AnyNode {
 	return []AnyNode{}
 }
 

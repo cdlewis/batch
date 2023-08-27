@@ -1,4 +1,4 @@
-package main
+package panera
 
 import "context"
 
@@ -7,9 +7,8 @@ type TransformNode[T, U any] interface {
 }
 
 type transformNodeImpl[T, U any] struct {
-	isResolved bool
-	child      Node[T]
-	fn         func(T) U
+	child Node[T]
+	fn    func(T) U
 }
 
 func NewTransformNode[T, U any](node Node[T], transformer func(T) U) TransformNode[T, U] {
@@ -29,7 +28,7 @@ func (l *transformNodeImpl[T, U]) IsResolved(ctx context.Context, id int) bool {
 	return nodeState.GetIsResolved(id)
 }
 
-func (l *transformNodeImpl[T, U]) GetAnyResolvables() []AnyNode {
+func (l *transformNodeImpl[T, U]) GetChildren() []AnyNode {
 	return []AnyNode{l.child}
 }
 

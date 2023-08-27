@@ -1,8 +1,7 @@
-package main
+package panera
 
 import (
 	"context"
-	"fmt"
 )
 
 type ListNode[T any] interface {
@@ -11,9 +10,8 @@ type ListNode[T any] interface {
 }
 
 type listNodeImpl[T any] struct {
-	isResolved bool
-	children   []Node[T]
-	results    []T
+	children []Node[T]
+	results  []T
 }
 
 func NewListNode[T any](children []Node[T]) ListNode[T] {
@@ -32,7 +30,7 @@ func (l *listNodeImpl[T]) IsResolved(ctx context.Context, id int) bool {
 	return nodeState.GetIsResolved(id)
 }
 
-func (l *listNodeImpl[T]) GetAnyResolvables() []AnyNode {
+func (l *listNodeImpl[T]) GetChildren() []AnyNode {
 	results := make([]AnyNode, 0, len(l.children))
 	for _, i := range l.children {
 		results = append(results, i.(AnyNode))
@@ -43,7 +41,6 @@ func (l *listNodeImpl[T]) GetAnyResolvables() []AnyNode {
 func (l *listNodeImpl[T]) Run(ctx context.Context, id int) any {
 	nodeState := NodeStateFromContext(ctx)
 	childIDs := nodeState.GetChildren(id)
-	fmt.Println(id, "child ids", childIDs)
 
 	results := make([]T, 0, len(l.children))
 	for idx, c := range l.children {

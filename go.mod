@@ -1,4 +1,4 @@
-module github.com/cdlewis/batch
+module batch
 
 go 1.19
 

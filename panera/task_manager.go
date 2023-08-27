@@ -1,4 +1,4 @@
-package main
+package panera
 
 import (
 	"context"
@@ -8,7 +8,16 @@ import (
 
 const _parentIDNotParent = -1
 
-type TaskManager struct {
+type TaskManager interface {
+	GetTask(int) AnyNode
+	UpdateTask(context.Context, int, AnyNode)
+	FinishTask(int)
+	GetRunnableTasksIDs() []int
+	GetRootTask() AnyNode
+	PrintDependencyTree()
+}
+
+type taskManagerImpl struct {
 	counter      int
 	tasks        map[int]AnyNode
 	dependencies map[int]map[int]struct{}
@@ -17,8 +26,8 @@ type TaskManager struct {
 	mutex        sync.RWMutex
 }
 
-func NewTaskManager(ctx context.Context, rootTask AnyNode) *TaskManager {
-	tm := &TaskManager{
+func NewTaskManager(ctx context.Context, rootTask AnyNode) TaskManager {
+	tm := &taskManagerImpl{
 		tasks:        map[int]AnyNode{},
 		dependencies: map[int]map[int]struct{}{},
 		hasRun:       map[int]bool{},
@@ -31,41 +40,34 @@ func NewTaskManager(ctx context.Context, rootTask AnyNode) *TaskManager {
 	return tm
 }
 
-func (t *TaskManager) UpdateTask(ctx context.Context, id int, node AnyNode) int {
+func (t *taskManagerImpl) UpdateTask(ctx context.Context, id int, node AnyNode) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
-	return t.exploreTaskGraph(ctx, node, id)
+	t.exploreTaskGraph(ctx, node, id)
 }
 
-func (t *TaskManager) GetTask(id int) AnyNode {
+func (t *taskManagerImpl) GetTask(id int) AnyNode {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
 	return t.tasks[id]
 }
 
-func (t *TaskManager) FinishTask(id int) []int {
+func (t *taskManagerImpl) FinishTask(id int) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
 	t.hasRun[id] = true
-	unblockedTasks := []int{}
 
 	for parentTaskID, childTasks := range t.dependencies {
 		if _, ok := childTasks[id]; ok {
 			delete(t.dependencies[parentTaskID], id)
-
-			if len(t.dependencies[id]) == 0 {
-				unblockedTasks = append(unblockedTasks, parentTaskID)
-			}
 		}
 	}
-
-	return unblockedTasks
 }
 
-func (t *TaskManager) GetRunnableTasksIDs() []int {
+func (t *taskManagerImpl) GetRunnableTasksIDs() []int {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
@@ -80,11 +82,11 @@ func (t *TaskManager) GetRunnableTasksIDs() []int {
 	return result
 }
 
-func (t *TaskManager) GetRootTask() AnyNode {
+func (t *taskManagerImpl) GetRootTask() AnyNode {
 	return t.rootTask
 }
 
-func (t *TaskManager) PrintDependencyTree() {
+func (t *taskManagerImpl) PrintDependencyTree() {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
@@ -99,7 +101,7 @@ func (t *TaskManager) PrintDependencyTree() {
 	}
 }
 
-func (t *TaskManager) addDependency(parentID, childID int) {
+func (t *taskManagerImpl) addDependency(parentID, childID int) {
 	if t.dependencies[parentID] == nil {
 		t.dependencies[parentID] = map[int]struct{}{}
 	}
@@ -112,7 +114,7 @@ type NodeParentPair struct {
 	Node     AnyNode
 }
 
-func (t *TaskManager) exploreTaskGraph(ctx context.Context, root AnyNode, parentID int) int {
+func (t *taskManagerImpl) exploreTaskGraph(ctx context.Context, root AnyNode, parentID int) int {
 	nodeState := NodeStateFromContext(ctx)
 
 	t.counter++
@@ -137,14 +139,12 @@ func (t *TaskManager) exploreTaskGraph(ctx context.Context, root AnyNode, parent
 			nextNode := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 
-			fmt.Println("Exploring", nextNode)
-
 			if nextNode.ParentID != -1 {
 				newRoot = nextNode.NodeID
 				t.addDependency(nextNode.ParentID, nextNode.NodeID)
 			}
 
-			children := nextNode.Node.GetAnyResolvables()
+			children := nextNode.Node.GetChildren()
 			childNodeIDs := make([]int, 0, len(children))
 			for _, w := range children {
 				t.counter++
@@ -160,7 +160,6 @@ func (t *TaskManager) exploreTaskGraph(ctx context.Context, root AnyNode, parent
 				childNodeIDs = append(childNodeIDs, id)
 			}
 
-			fmt.Println("Adding children", nextNode.NodeID, childNodeIDs)
 			nodeState.AddChildren(nextNode.NodeID, childNodeIDs)
 		}
 

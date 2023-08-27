@@ -1,10 +1,10 @@
-package main
+package panera
 
 import "context"
 
 type AnyNode interface {
 	IsResolved(context.Context, int) bool
-	GetAnyResolvables() []AnyNode
+	GetChildren() []AnyNode
 	Run(context.Context, int) any
 }
 

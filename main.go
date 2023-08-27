@@ -4,23 +4,25 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"batch/panera"
 )
 
 func main() {
 	userService := UserService{}
 	userResolver := UserResolver{}
 
-	users := NewTransformNode[[]User, string](
-		NewListNode([]Node[User]{
-			NewFlatMapNode(
+	users := panera.NewTransformNode[[]User, string](
+		panera.NewListNode([]panera.Node[User]{
+			panera.NewFlatMapNode(
 				userService.Fetch(0),
-				func(result User) Node[User] {
+				func(result User) panera.Node[User] {
 					return userService.Fetch(1)
 				},
 			),
-			NewFlatMapNode(
+			panera.NewFlatMapNode(
 				userService.Fetch(1),
-				func(result User) Node[User] {
+				func(result User) panera.Node[User] {
 					return userService.Fetch(2)
 				},
 			),
@@ -37,10 +39,10 @@ func main() {
 		},
 	)
 
-	result := ExecuteGraph[string](
+	result := panera.ExecuteGraph[string](
 		context.Background(),
 		users,
-		map[string]Resolver{
+		map[string]panera.Resolver{
 			userResolver.ID(): userResolver,
 		},
 	)
