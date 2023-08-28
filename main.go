@@ -11,6 +11,16 @@ import (
 func main() {
 	userService := UserService{}
 
+	// This is an example of a non-trivial execution graph. FetchUser is intended to simulate
+	// an RPC.
+	//
+	// FetchUser(0) --> FetchUser(1)  |
+	// FetchUser(1) --> FetchUser(2)  |--> Merge results into a string
+	// FetchUser(2) --------------->  |
+	//
+	// In this scenario we see two groups of RPCs to the same service. We are able to identify
+	// both groups of calls and batch them appropriately.
+
 	users := panera.NewTransformNode[[]User, string](
 		panera.NewListNode([]panera.Node[User]{
 			panera.NewFlatMapNode(
