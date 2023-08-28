@@ -5,6 +5,9 @@ import (
 	"sync"
 )
 
+// NodeManager manages Nodes for the lifetime of a single request. It is
+// responsible for identifying and tracking dependencies. It can be queried
+// by the executor to find new executable nodes.
 type NodeManager interface {
 	GetNodeByID(NodeID) AnyNode
 	AttachNode(NodeID, AnyNode)

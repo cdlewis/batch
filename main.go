@@ -48,7 +48,7 @@ func main() {
 		},
 	)
 
-	result := panera.ExecuteGraph[string](
+	result, _ := panera.ExecuteGraph[string](
 		context.Background(),
 		users,
 		map[string]panera.Resolver{

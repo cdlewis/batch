@@ -4,6 +4,7 @@ import (
 	"context"
 )
 
+// ValueNode represent a constant value.
 type ValueNode[T any] struct {
 	Node[T]
 

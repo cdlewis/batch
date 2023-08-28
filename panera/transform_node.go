@@ -4,6 +4,8 @@ import (
 	"context"
 )
 
+// TransformNode represents a 'map' operation on the Node type, transforming
+// the contents of a node from type T to type U.
 type TransformNode[T, U any] interface {
 	Node[U]
 }

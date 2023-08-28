@@ -5,10 +5,26 @@ import (
 	"sync"
 )
 
+// NodeState tracks the state of each node in the graph. Our goal is to avoid
+// state existing on the nodes themselves since this wouldn't make it safe to
+// run the same graph multiple times.
+//
+// Ultimately there may be better ways of accomplishing this goal. Forcing nodes
+// to all read/write through a single mutex may create unnecessary lock contention
+// vs having them, e.g. write to context directly.
+//
+// But for a proof-of-concept, this is fine.
+type NodeState interface {
+	GetIsResolved(NodeID) bool
+	SetIsResolved(NodeID, bool)
+	GetResolvedValue(NodeID) any
+	SetResolvedValue(NodeID, any)
+}
+
 var nodeStateKey struct{}
 
 func ContextWithNodeState(ctx context.Context) context.Context {
-	nodeState := &nodeState{
+	nodeState := &nodeStateImpl{
 		resolved:      map[NodeID]bool{},
 		resolvedValue: map[NodeID]any{},
 
@@ -21,36 +37,36 @@ func ContextWithNodeState(ctx context.Context) context.Context {
 	return context.WithValue(ctx, nodeStateKey, nodeState)
 }
 
-func NodeStateFromContext(ctx context.Context) *nodeState {
-	return ctx.Value(nodeStateKey).(*nodeState)
+func NodeStateFromContext(ctx context.Context) NodeState {
+	return ctx.Value(nodeStateKey).(NodeState)
 }
 
-type nodeState struct {
+type nodeStateImpl struct {
 	resolved      map[NodeID]bool
 	resolvedValue map[NodeID]any
 	mutex         sync.RWMutex
 }
 
-func (n *nodeState) GetIsResolved(id NodeID) bool {
+func (n *nodeStateImpl) GetIsResolved(id NodeID) bool {
 	n.mutex.RLock()
 	defer n.mutex.RUnlock()
 	return n.resolved[id]
 }
 
-func (n *nodeState) SetIsResolved(id NodeID, state bool) {
+func (n *nodeStateImpl) SetIsResolved(id NodeID, state bool) {
 	n.mutex.Lock()
 	defer n.mutex.Unlock()
 	n.resolved[id] = state
 }
 
-func (n *nodeState) GetResolvedValue(id NodeID) any {
+func (n *nodeStateImpl) GetResolvedValue(id NodeID) any {
 	n.mutex.RLock()
 	defer n.mutex.RUnlock()
 
 	return n.resolvedValue[id]
 }
 
-func (n *nodeState) SetResolvedValue(id NodeID, value any) {
+func (n *nodeStateImpl) SetResolvedValue(id NodeID, value any) {
 	n.mutex.Lock()
 	defer n.mutex.Unlock()
 

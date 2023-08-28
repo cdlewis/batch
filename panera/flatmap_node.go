@@ -4,13 +4,15 @@ import (
 	"context"
 )
 
-type AnyFlatMap interface {
-	FlatMapFullyResolved(context.Context) bool
-}
-
+// FlatMapNode implements a 'flatmap' (or 'bind' in haskell) operation on the Node type.
+// Taking a Node and producing a new Node is a useful way to express chained RPCs.
 type FlatMapNode[T, U any] interface {
 	Node[U]
 	AnyFlatMap
+}
+
+type AnyFlatMap interface {
+	FlatMapFullyResolved(context.Context) bool
 }
 
 type flatMapNodeImpl[T, U any] struct {

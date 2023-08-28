@@ -4,15 +4,19 @@ import (
 	"context"
 )
 
+// BatchQueryNode is a special type of node, used as a helper for constructing
+// batchable service adapters. As such, users implement a BuildQuery method instead
+// of a Run function.
+type BatchQueryNode[Q, R any] interface {
+	Node[R]
+	AnyBatchQueryNode
+}
+
+// AnyBatchQueryNode is a generic type param-free version of BatchQueryNode
 type AnyBatchQueryNode interface {
 	ResolverID() string
 	SetResult(context.Context, any)
 	BuildQuery(context.Context) any
-}
-
-type BatchQueryNode[Q, R any] interface {
-	Node[R]
-	AnyBatchQueryNode
 }
 
 type batchQueryNodeImpl[Q, R any] struct {

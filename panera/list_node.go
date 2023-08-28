@@ -4,6 +4,8 @@ import (
 	"context"
 )
 
+// ListNode is a Node that contains a collection of Nodes. It is resolved when
+// all the elements in its collection have themselves been resolved.
 type ListNode[T any] interface {
 	Node[[]T]
 }
