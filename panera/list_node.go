@@ -9,24 +9,26 @@ type ListNode[T any] interface {
 }
 
 type listNodeImpl[T any] struct {
+	id       NodeID
 	children []Node[T]
 	results  []T
 }
 
 func NewListNode[T any](children []Node[T]) ListNode[T] {
 	return &listNodeImpl[T]{
+		id:       NewNodeID(),
 		children: children,
 	}
 }
 
-func (l *listNodeImpl[T]) GetValue(ctx context.Context, id int) []T {
+func (l *listNodeImpl[T]) GetValue(ctx context.Context) []T {
 	nodeState := NodeStateFromContext(ctx)
-	return nodeState.GetResolvedValue(id).([]T)
+	return nodeState.GetResolvedValue(l.id).([]T)
 }
 
-func (l *listNodeImpl[T]) IsResolved(ctx context.Context, id int) bool {
+func (l *listNodeImpl[T]) IsResolved(ctx context.Context) bool {
 	nodeState := NodeStateFromContext(ctx)
-	return nodeState.GetIsResolved(id)
+	return nodeState.GetIsResolved(l.id)
 }
 
 func (l *listNodeImpl[T]) GetChildren() []AnyNode {
@@ -37,21 +39,28 @@ func (l *listNodeImpl[T]) GetChildren() []AnyNode {
 	return results
 }
 
-func (l *listNodeImpl[T]) Run(ctx context.Context, id int) any {
+func (l *listNodeImpl[T]) Run(ctx context.Context) any {
 	nodeState := NodeStateFromContext(ctx)
-	childIDs := nodeState.GetChildren(id)
 
 	results := make([]T, 0, len(l.children))
-	for idx, c := range l.children {
-		results = append(results, c.GetValue(ctx, childIDs[idx]))
+	for _, c := range l.children {
+		results = append(results, c.GetValue(ctx))
 	}
 
-	nodeState.SetResolvedValue(id, results)
-	nodeState.SetIsResolved(id, true)
+	nodeState.SetResolvedValue(l.id, results)
+	nodeState.SetIsResolved(l.id, true)
 
 	return results
 }
 
 func (l *listNodeImpl[T]) Result() any {
 	return l.results
+}
+
+func (l *listNodeImpl[T]) GetID() NodeID {
+	return l.id
+}
+
+func (l *listNodeImpl[T]) Debug() string {
+	return "List"
 }

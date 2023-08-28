@@ -2,10 +2,11 @@ package panera
 
 import (
 	"context"
+	"fmt"
 )
 
 type AnyFlatMap interface {
-	FlatMapFullyResolved(context.Context, int) bool
+	FlatMapFullyResolved(context.Context) bool
 }
 
 type FlatMapNode[T, U any] interface {
@@ -14,6 +15,7 @@ type FlatMapNode[T, U any] interface {
 }
 
 type flatMapNodeImpl[T, U any] struct {
+	id    NodeID
 	child Node[T]
 	fn    func(T) Node[U]
 }
@@ -22,63 +24,63 @@ func NewFlatMapNode[T, U any](
 	node Node[T],
 	transformer func(T) Node[U],
 ) FlatMapNode[T, U] {
+	nodeID := NewNodeID()
+	fmt.Println("made flatmap with id", nodeID)
 	return &flatMapNodeImpl[T, U]{
+		id:    nodeID,
 		child: node,
 		fn:    transformer,
 	}
 }
 
-func (f *flatMapNodeImpl[T, U]) IsResolved(ctx context.Context, id int) bool {
+func (f *flatMapNodeImpl[T, U]) IsResolved(ctx context.Context) bool {
 	nodeState := NodeStateFromContext(ctx)
-	return nodeState.GetIsResolved(id)
+	return nodeState.GetIsResolved(f.id)
 }
 
-func (f *flatMapNodeImpl[T, U]) Run(ctx context.Context, id int) any {
+func (f *flatMapNodeImpl[T, U]) Run(ctx context.Context) any {
 	nodeState := NodeStateFromContext(ctx)
 
-	if _, ok := nodeState.GetResolvedValue(id).(Node[U]); ok {
+	if _, ok := nodeState.GetResolvedValue(f.id).(Node[U]); ok {
 		panic("Invariant violation: flatMap run multiple times")
 	}
 
-	children := nodeState.GetChildren(id)
-	result := f.fn(f.child.GetValue(ctx, children[0]))
-	nodeState.SetResolvedValue(id, result)
+	result := f.fn(f.child.GetValue(ctx))
+	nodeState.SetResolvedValue(f.id, result)
 
 	return result
 }
 
-func (f *flatMapNodeImpl[T, U]) GetValue(ctx context.Context, id int) U {
+func (f *flatMapNodeImpl[T, U]) GetValue(ctx context.Context) U {
 	nodeState := NodeStateFromContext(ctx)
 
-	grandChild, ok := nodeState.GetResolvedValue(id).(Node[U])
+	grandChild, ok := nodeState.GetResolvedValue(f.id).(Node[U])
 	if !ok {
 		panic("Invariant violation: node state does not contain a valid node")
 	}
 
-	children := nodeState.GetChildren(id)
-	if len(children) != 2 {
-		panic("Invariant violation: node should contain exactly two children")
-	}
-
-	return grandChild.GetValue(ctx, children[1])
+	return grandChild.GetValue(ctx)
 }
 
 func (f *flatMapNodeImpl[T, U]) GetChildren() []AnyNode {
 	return []AnyNode{f.child}
 }
 
-func (f *flatMapNodeImpl[T, U]) FlatMapFullyResolved(ctx context.Context, id int) bool {
+func (f *flatMapNodeImpl[T, U]) FlatMapFullyResolved(ctx context.Context) bool {
 	nodeState := NodeStateFromContext(ctx)
 
-	grandChild, ok := nodeState.GetResolvedValue(id).(Node[U])
+	grandChild, ok := nodeState.GetResolvedValue(f.id).(Node[U])
 	if !ok {
 		return false
 	}
 
-	children := nodeState.GetChildren(id)
-	if len(children) != 2 {
-		return false
-	}
+	return grandChild.IsResolved(ctx)
+}
 
-	return grandChild.IsResolved(ctx, children[1])
+func (f *flatMapNodeImpl[T, U]) GetID() NodeID {
+	return f.id
+}
+
+func (f *flatMapNodeImpl[T, U]) Debug() string {
+	return "FlatMap"
 }

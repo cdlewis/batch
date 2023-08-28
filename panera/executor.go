@@ -19,24 +19,26 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 		// through the 'taskResolved' channel, which triggers a re-evaluate if
 		// any new work is executable.
 		for range taskResolved {
+			taskManager.PrintDependencyTree()
 
 			// Can we terminate?
-			if taskManager.GetRootTask().IsResolved(ctx, 1) {
+			if taskManager.GetRootTask().IsResolved(ctx) {
 				done <- true
 			}
 
 			runnableTasks := taskManager.GetRunnableTasksIDs()
+			fmt.Println("Runnable tasks", runnableTasks)
 
 			// Group tasks into batch and non-batch
-			batchableTasks := map[int]AnyBatchQueryNode{}
-			batchableQueries := map[string]map[int]any{}
-			regularTasks := []int{}
+			batchableTasks := map[NodeID]AnyBatchQueryNode{}
+			batchableQueries := map[string]map[NodeID]any{}
+			regularTasks := []NodeID{}
 			for _, id := range runnableTasks {
 				node := taskManager.GetTask(id)
 				if batchTask, ok := node.(AnyBatchQueryNode); ok {
 					resolverID := batchTask.ResolverID()
 					if batchableQueries[resolverID] == nil {
-						batchableQueries[resolverID] = map[int]any{}
+						batchableQueries[resolverID] = map[NodeID]any{}
 					}
 
 					batchableTasks[id] = batchTask
@@ -54,7 +56,7 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 					resultsMap := resolvers[resolverID].Resolve(ctx, taskMap)
 					for id, result := range resultsMap {
 						fmt.Println("Resolve", id, result)
-						batchableTasks[id].SetResult(ctx, id, result)
+						batchableTasks[id].SetResult(ctx, result)
 						taskManager.FinishTask(id)
 					}
 
@@ -77,10 +79,11 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 				// but requires special handling so for the moment we just evaluate the
 				// flatMap's transform function syncronously.
 				if flatMapNode, isFlatMap := currentTask.(AnyFlatMap); isFlatMap {
-					if flatMapNode.FlatMapFullyResolved(ctx, taskID) {
+					fmt.Println(">> Detected flatmap", taskID)
+					if flatMapNode.FlatMapFullyResolved(ctx) {
 						taskManager.FinishTask(taskID)
 					} else {
-						newNode := currentTask.Run(ctx, taskID).(AnyNode)
+						newNode := currentTask.Run(ctx).(AnyNode)
 						taskManager.UpdateTask(ctx, taskID, newNode)
 					}
 
@@ -93,10 +96,12 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 				}
 
 				go func() {
+					fmt.Println("Executing regular task", taskID)
 					currentTask := taskManager.GetTask(taskID)
+					currentTask.Debug()
 
-					if !currentTask.IsResolved(ctx, taskID) {
-						currentTask.Run(ctx, taskID)
+					if !currentTask.IsResolved(ctx) {
+						currentTask.Run(ctx)
 					}
 
 					taskManager.FinishTask(taskID)
@@ -109,7 +114,7 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 
 	select {
 	case <-done:
-		return taskManager.GetRootTask().(Node[T]).GetValue(ctx, 1)
+		return taskManager.GetRootTask().(Node[T]).GetValue(ctx)
 	case <-ctx.Done():
 		panic("timeout")
 	}

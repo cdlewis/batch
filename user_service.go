@@ -28,9 +28,9 @@ func (u UserService) ID() string {
 	return UserResolverID
 }
 
-func (u UserService) Resolve(ctx context.Context, queries map[int]any) map[int]any {
+func (u UserService) Resolve(ctx context.Context, queries map[panera.NodeID]any) map[panera.NodeID]any {
 	fmt.Println("Detected", len(queries), "queries to the same service")
-	results := make(map[int]any, len(queries))
+	results := make(map[panera.NodeID]any, len(queries))
 
 	for id, query := range queries {
 		requestedID := query.(int)

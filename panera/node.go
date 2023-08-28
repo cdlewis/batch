@@ -3,13 +3,15 @@ package panera
 import "context"
 
 type AnyNode interface {
-	IsResolved(context.Context, int) bool
+	GetID() NodeID
+	IsResolved(context.Context) bool
 	GetChildren() []AnyNode
-	Run(context.Context, int) any
+	Run(context.Context) any
+	Debug() string
 }
 
 type Node[T any] interface {
 	AnyNode
 
-	GetValue(context.Context, int) T
+	GetValue(context.Context) T
 }

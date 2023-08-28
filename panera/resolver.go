@@ -5,5 +5,5 @@ import "context"
 type Resolver interface {
 	ID() string
 
-	Resolve(context.Context, map[int]any) map[int]any
+	Resolve(context.Context, map[NodeID]any) map[NodeID]any
 }

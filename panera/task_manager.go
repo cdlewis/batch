@@ -9,52 +9,55 @@ import (
 const _parentIDNotParent = -1
 
 type TaskManager interface {
-	GetTask(int) AnyNode
-	UpdateTask(context.Context, int, AnyNode)
-	FinishTask(int)
-	GetRunnableTasksIDs() []int
+	GetTask(NodeID) AnyNode
+	UpdateTask(context.Context, NodeID, AnyNode)
+	FinishTask(NodeID)
+	GetRunnableTasksIDs() []NodeID
 	GetRootTask() AnyNode
 	PrintDependencyTree()
 }
 
 type taskManagerImpl struct {
-	counter      int
-	tasks        map[int]AnyNode
-	dependencies map[int]map[int]struct{}
-	hasRun       map[int]bool
+	tasks        map[NodeID]AnyNode
+	dependencies map[NodeID]map[NodeID]struct{}
+	hasRun       map[NodeID]bool
 	rootTask     AnyNode
 	mutex        sync.RWMutex
 }
 
 func NewTaskManager(ctx context.Context, rootTask AnyNode) TaskManager {
 	tm := &taskManagerImpl{
-		tasks:        map[int]AnyNode{},
-		dependencies: map[int]map[int]struct{}{},
-		hasRun:       map[int]bool{},
+		tasks:        map[NodeID]AnyNode{},
+		dependencies: map[NodeID]map[NodeID]struct{}{},
+		hasRun:       map[NodeID]bool{},
 		rootTask:     rootTask,
 		mutex:        sync.RWMutex{},
 	}
 
-	tm.exploreTaskGraph(ctx, rootTask, _parentIDNotParent)
+	tm.exploreTaskGraph(ctx, rootTask, nil)
 
 	return tm
 }
 
-func (t *taskManagerImpl) UpdateTask(ctx context.Context, id int, node AnyNode) {
+func (t *taskManagerImpl) UpdateTask(ctx context.Context, id NodeID, node AnyNode) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
 	t.exploreTaskGraph(ctx, node, id)
 }
 
-func (t *taskManagerImpl) GetTask(id int) AnyNode {
+func (t *taskManagerImpl) GetTask(id NodeID) AnyNode {
+	if id == nil {
+		panic("Attempted to retrieve invalid task")
+	}
+
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
 	return t.tasks[id]
 }
 
-func (t *taskManagerImpl) FinishTask(id int) {
+func (t *taskManagerImpl) FinishTask(id NodeID) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
@@ -67,11 +70,11 @@ func (t *taskManagerImpl) FinishTask(id int) {
 	}
 }
 
-func (t *taskManagerImpl) GetRunnableTasksIDs() []int {
+func (t *taskManagerImpl) GetRunnableTasksIDs() []NodeID {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
-	result := []int{}
+	result := []NodeID{}
 
 	for id := range t.tasks {
 		if len(t.dependencies[id]) == 0 && !t.hasRun[id] {
@@ -92,44 +95,36 @@ func (t *taskManagerImpl) PrintDependencyTree() {
 
 	fmt.Println("Tasks")
 	for taskID, task := range t.tasks {
-		fmt.Println("\t", taskID, task)
+		fmt.Println("\t", taskID, task.Debug())
 	}
 	fmt.Println()
 	fmt.Println("Dependency tree:")
 	for nodeID, deps := range t.dependencies {
-		fmt.Println("\t", nodeID, deps)
+		fmt.Println("\t", nodeID, t.tasks[nodeID].Debug())
+		for childID := range deps {
+			fmt.Println("\t\t", childID, t.tasks[childID].Debug())
+		}
 	}
 }
 
-func (t *taskManagerImpl) addDependency(parentID, childID int) {
+func (t *taskManagerImpl) addDependency(parentID, childID NodeID) {
 	if t.dependencies[parentID] == nil {
-		t.dependencies[parentID] = map[int]struct{}{}
+		t.dependencies[parentID] = map[NodeID]struct{}{}
 	}
 	t.dependencies[parentID][childID] = struct{}{}
 }
 
 type NodeParentPair struct {
-	NodeID   int
-	ParentID int
+	ParentID NodeID
 	Node     AnyNode
 }
 
-func (t *taskManagerImpl) exploreTaskGraph(ctx context.Context, root AnyNode, parentID int) int {
-	nodeState := NodeStateFromContext(ctx)
-
-	t.counter++
-	newRoot := t.counter
+func (t *taskManagerImpl) exploreTaskGraph(ctx context.Context, root AnyNode, parentID NodeID) {
 	stack := []NodeParentPair{
 		{
-			NodeID:   newRoot,
 			ParentID: parentID,
 			Node:     root,
 		},
-	}
-	t.tasks[newRoot] = root
-
-	if parentID != _parentIDNotParent {
-		nodeState.AddChildren(parentID, []int{newRoot})
 	}
 
 	for len(stack) > 0 {
@@ -139,32 +134,21 @@ func (t *taskManagerImpl) exploreTaskGraph(ctx context.Context, root AnyNode, pa
 			nextNode := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 
-			if nextNode.ParentID != -1 {
-				newRoot = nextNode.NodeID
-				t.addDependency(nextNode.ParentID, nextNode.NodeID)
+			t.tasks[nextNode.Node.GetID()] = nextNode.Node
+
+			if nextNode.ParentID.IsSet() {
+				t.addDependency(nextNode.ParentID, nextNode.Node.GetID())
 			}
 
 			children := nextNode.Node.GetChildren()
-			childNodeIDs := make([]int, 0, len(children))
 			for _, w := range children {
-				t.counter++
-				id := t.counter
-				t.tasks[id] = w
-
 				nextStack = append(nextStack, NodeParentPair{
-					ParentID: nextNode.NodeID,
-					NodeID:   id,
+					ParentID: nextNode.Node.GetID(),
 					Node:     w,
 				})
-
-				childNodeIDs = append(childNodeIDs, id)
 			}
-
-			nodeState.AddChildren(nextNode.NodeID, childNodeIDs)
 		}
 
 		stack = nextStack
 	}
-
-	return newRoot
 }

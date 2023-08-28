@@ -6,7 +6,7 @@ import (
 
 type AnyBatchQueryNode interface {
 	ResolverID() string
-	SetResult(context.Context, int, any)
+	SetResult(context.Context, any)
 	BuildQuery(context.Context) any
 }
 
@@ -18,6 +18,7 @@ type BatchQueryNode[Q, R any] interface {
 type batchQueryNodeImpl[Q, R any] struct {
 	BatchQueryNode[Q, R]
 
+	id         NodeID
 	queryFn    func(context.Context) Q
 	resolverID string
 }
@@ -27,26 +28,27 @@ func NewBatchQueryNode[Q, R any](
 	resolverID string,
 ) BatchQueryNode[Q, R] {
 	return &batchQueryNodeImpl[Q, R]{
+		id:         NewNodeID(),
 		queryFn:    queryFn,
 		resolverID: resolverID,
 	}
 }
 
-func (v *batchQueryNodeImpl[Q, R]) GetValue(ctx context.Context, id int) R {
+func (v *batchQueryNodeImpl[Q, R]) GetValue(ctx context.Context) R {
 	nodeState := NodeStateFromContext(ctx)
-	return nodeState.GetResolvedValue(id).(R)
+	return nodeState.GetResolvedValue(v.id).(R)
 }
 
-func (v *batchQueryNodeImpl[Q, R]) IsResolved(ctx context.Context, id int) bool {
+func (v *batchQueryNodeImpl[Q, R]) IsResolved(ctx context.Context) bool {
 	nodeState := NodeStateFromContext(ctx)
-	return nodeState.GetIsResolved(id)
+	return nodeState.GetIsResolved(v.id)
 }
 
 func (v *batchQueryNodeImpl[Q, R]) GetChildren() []AnyNode {
 	return []AnyNode{}
 }
 
-func (v *batchQueryNodeImpl[Q, R]) Run(_ context.Context, id int) any {
+func (v *batchQueryNodeImpl[Q, R]) Run(_ context.Context) any {
 	panic("we should batch this -- you screwed up")
 }
 
@@ -58,8 +60,16 @@ func (v *batchQueryNodeImpl[Q, R]) BuildQuery(ctx context.Context) any {
 	return v.queryFn(ctx)
 }
 
-func (v *batchQueryNodeImpl[Q, R]) SetResult(ctx context.Context, id int, result any) {
+func (v *batchQueryNodeImpl[Q, R]) SetResult(ctx context.Context, result any) {
 	nodeState := NodeStateFromContext(ctx)
-	nodeState.SetResolvedValue(id, result)
-	nodeState.SetIsResolved(id, true)
+	nodeState.SetResolvedValue(v.id, result)
+	nodeState.SetIsResolved(v.id, true)
+}
+
+func (v *batchQueryNodeImpl[Q, R]) GetID() NodeID {
+	return v.id
+}
+
+func (v *batchQueryNodeImpl[Q, R]) Debug() string {
+	return "BatchNode"
 }
