@@ -1,23 +1,20 @@
 package panera
 
 import (
-	"context"
 	"fmt"
 	"sync"
 )
 
-const _parentIDNotParent = -1
-
-type TaskManager interface {
-	GetTask(NodeID) AnyNode
-	UpdateTask(context.Context, NodeID, AnyNode)
-	FinishTask(NodeID)
-	GetRunnableTasksIDs() []NodeID
-	GetRootTask() AnyNode
+type NodeManager interface {
+	GetNodeByID(NodeID) AnyNode
+	AttachNode(NodeID, AnyNode)
+	RemoveNodeAsDependency(NodeID)
+	GetRunnableNodes() []NodeID
+	GetRootNode() AnyNode
 	PrintDependencyTree()
 }
 
-type taskManagerImpl struct {
+type nodeManagerImpl struct {
 	tasks        map[NodeID]AnyNode
 	dependencies map[NodeID]map[NodeID]struct{}
 	hasRun       map[NodeID]bool
@@ -28,8 +25,8 @@ type taskManagerImpl struct {
 	mutex sync.RWMutex
 }
 
-func NewTaskManager(ctx context.Context, rootTask AnyNode) TaskManager {
-	tm := &taskManagerImpl{
+func NewNodeManager(rootTask AnyNode) NodeManager {
+	tm := &nodeManagerImpl{
 		tasks:        map[NodeID]AnyNode{},
 		dependencies: map[NodeID]map[NodeID]struct{}{},
 		hasRun:       map[NodeID]bool{},
@@ -37,19 +34,19 @@ func NewTaskManager(ctx context.Context, rootTask AnyNode) TaskManager {
 		mutex:        sync.RWMutex{},
 	}
 
-	tm.exploreTaskGraph(ctx, rootTask, nil)
+	tm.exploreNodeGraph(rootTask, nil)
 
 	return tm
 }
 
-func (t *taskManagerImpl) UpdateTask(ctx context.Context, id NodeID, node AnyNode) {
+func (t *nodeManagerImpl) AttachNode(id NodeID, node AnyNode) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
-	t.exploreTaskGraph(ctx, node, id)
+	t.exploreNodeGraph(node, id)
 }
 
-func (t *taskManagerImpl) GetTask(id NodeID) AnyNode {
+func (t *nodeManagerImpl) GetNodeByID(id NodeID) AnyNode {
 	if id == nil {
 		panic("Attempted to retrieve invalid task")
 	}
@@ -60,7 +57,7 @@ func (t *taskManagerImpl) GetTask(id NodeID) AnyNode {
 	return t.tasks[id]
 }
 
-func (t *taskManagerImpl) FinishTask(id NodeID) {
+func (t *nodeManagerImpl) RemoveNodeAsDependency(id NodeID) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
@@ -73,7 +70,7 @@ func (t *taskManagerImpl) FinishTask(id NodeID) {
 	}
 }
 
-func (t *taskManagerImpl) GetRunnableTasksIDs() []NodeID {
+func (t *nodeManagerImpl) GetRunnableNodes() []NodeID {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
@@ -88,11 +85,11 @@ func (t *taskManagerImpl) GetRunnableTasksIDs() []NodeID {
 	return result
 }
 
-func (t *taskManagerImpl) GetRootTask() AnyNode {
+func (t *nodeManagerImpl) GetRootNode() AnyNode {
 	return t.rootTask
 }
 
-func (t *taskManagerImpl) PrintDependencyTree() {
+func (t *nodeManagerImpl) PrintDependencyTree() {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
@@ -110,7 +107,7 @@ func (t *taskManagerImpl) PrintDependencyTree() {
 	}
 }
 
-func (t *taskManagerImpl) addDependency(parentID, childID NodeID) {
+func (t *nodeManagerImpl) addDependency(parentID, childID NodeID) {
 	if t.dependencies[parentID] == nil {
 		t.dependencies[parentID] = map[NodeID]struct{}{}
 	}
@@ -122,7 +119,7 @@ type NodeParentPair struct {
 	Node     AnyNode
 }
 
-func (t *taskManagerImpl) exploreTaskGraph(ctx context.Context, root AnyNode, parentID NodeID) {
+func (t *nodeManagerImpl) exploreNodeGraph(root AnyNode, parentID NodeID) {
 	stack := []NodeParentPair{
 		{
 			ParentID: parentID,

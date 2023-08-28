@@ -4,103 +4,107 @@ import (
 	"context"
 )
 
-func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[string]Resolver) T {
+func ExecuteGraph[T any](
+	parentCtx context.Context,
+	node AnyNode,
+	resolvers map[string]Resolver,
+) (T, error) {
 	ctx := ContextWithNodeState(parentCtx)
 
-	taskManager := NewTaskManager(ctx, node)
+	nodeManager := NewNodeManager(node)
 
-	taskResolved := make(chan struct{}, 1)
-	taskResolved <- struct{}{}
+	nodeResolved := make(chan struct{}, 1)
+	nodeResolved <- struct{}{}
 	done := make(chan bool)
 
 	go func() {
-		// This is our main loop. We receive notifications about completed tasks
-		// through the 'taskResolved' channel, which triggers a re-evaluate if
+		// This is our main loop. We receive notifications about completed nodes
+		// through the 'nodeResolved' channel, which triggers a re-evaluate if
 		// any new work is executable.
-		for range taskResolved {
+		for range nodeResolved {
 
 			// Can we terminate?
-			if taskManager.GetRootTask().IsResolved(ctx) {
+			if nodeManager.GetRootNode().IsResolved(ctx) {
 				done <- true
 			}
 
-			runnableTasks := taskManager.GetRunnableTasksIDs()
+			runnableNodes := nodeManager.GetRunnableNodes()
 
-			// Group tasks into batch and non-batch
-			batchableTasks := map[NodeID]AnyBatchQueryNode{}
+			// Group nodes into batch and non-batch
+			batchableNodes := map[NodeID]AnyBatchQueryNode{}
 			batchableQueries := map[string]map[NodeID]any{}
-			regularTasks := []NodeID{}
-			for _, id := range runnableTasks {
-				node := taskManager.GetTask(id)
-				if batchTask, ok := node.(AnyBatchQueryNode); ok {
-					resolverID := batchTask.ResolverID()
+			regularNodes := []NodeID{}
+			for _, id := range runnableNodes {
+				node := nodeManager.GetNodeByID(id)
+				if batchNode, ok := node.(AnyBatchQueryNode); ok {
+					resolverID := batchNode.ResolverID()
 					if batchableQueries[resolverID] == nil {
 						batchableQueries[resolverID] = map[NodeID]any{}
 					}
 
-					batchableTasks[id] = batchTask
-					batchableQueries[resolverID][id] = batchTask.BuildQuery(ctx)
+					batchableNodes[id] = batchNode
+					batchableQueries[resolverID][id] = batchNode.BuildQuery(ctx)
 				} else {
-					regularTasks = append(regularTasks, id)
+					regularNodes = append(regularNodes, id)
 				}
 			}
 
-			// Kick off async resolvers for the batch tasks
+			// Kick off async resolvers for the batch nodes
 
-			for resolverID, taskMap := range batchableQueries {
-				resolverID, taskMap := resolverID, taskMap
+			for resolverID, nodeMap := range batchableQueries {
+				resolverID, nodeMap := resolverID, nodeMap
 				go func() {
-					resultsMap := resolvers[resolverID].Resolve(ctx, taskMap)
+					resultsMap := resolvers[resolverID].Resolve(ctx, nodeMap)
 					for id, result := range resultsMap {
-						batchableTasks[id].SetResult(ctx, result)
-						taskManager.FinishTask(id)
+						batchableNodes[id].SetResult(ctx, result)
+						nodeManager.RemoveNodeAsDependency(id)
 					}
 
-					taskResolved <- struct{}{}
+					nodeResolved <- struct{}{}
 				}()
 			}
 
-			// Kick off individual tasks
+			// Kick off individual nodes
 
-			for _, taskID := range regularTasks {
-				taskID := taskID
-				currentTask := taskManager.GetTask(taskID)
+			for _, nodeID := range regularNodes {
+				nodeID := nodeID
+				currentNode := nodeManager.GetNodeByID(nodeID)
 
 				// FlatMaps are a special case because they are the only node that can
 				// produce new nodes. These new nodes then have to be added to the
-				// task manager.
+				// node manager.
 				//
-				// If we do this in parallel we risk re-evaluating task candidates before
-				// the new task has been scheduled (a race condition). This is fixable
-				// but requires special handling so for the moment we just evaluate the
+				// If we do this in parallel we risk re-evaluating node candidates before
+				// the new node has been scheduled (a race condition). This is fixable
+				// but requires (more) special handling so for the moment we just evaluate the
 				// flatMap's transform function syncronously.
-				if flatMapNode, isFlatMap := currentTask.(AnyFlatMap); isFlatMap {
+				if flatMapNode, isFlatMap := currentNode.(AnyFlatMap); isFlatMap {
 					if flatMapNode.FlatMapFullyResolved(ctx) {
-						taskManager.FinishTask(taskID)
+						nodeManager.RemoveNodeAsDependency(nodeID)
 					} else {
-						newNode := currentTask.Run(ctx).(AnyNode)
-						taskManager.UpdateTask(ctx, taskID, newNode)
+						newNode := currentNode.Run(ctx).(AnyNode)
+						nodeManager.AttachNode(nodeID, newNode)
 					}
 
-					// Technically we don't know if a task has been resolved. We 'kick' the
+					// Technically we don't know if a node has been resolved. We 'kick' the
 					// scheduler here to avoid deadlocks.
 					go func() {
-						taskResolved <- struct{}{}
+						nodeResolved <- struct{}{}
 					}()
 					continue
 				}
 
 				go func() {
-					currentTask := taskManager.GetTask(taskID)
-					currentTask.Debug()
+					currentNode := nodeManager.GetNodeByID(nodeID)
+					currentNode.Debug()
 
-					if !currentTask.IsResolved(ctx) {
-						currentTask.Run(ctx)
+					if !currentNode.IsResolved(ctx) {
+						currentNode.Run(ctx)
 					}
 
-					taskManager.FinishTask(taskID)
+					nodeManager.RemoveNodeAsDependency(nodeID)
 
-					taskResolved <- struct{}{}
+					nodeResolved <- struct{}{}
 				}()
 			}
 		}
@@ -109,8 +113,8 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 	// Wait until all nodes are resolved or we time out
 	select {
 	case <-done:
-		return taskManager.GetRootTask().(Node[T]).GetValue(ctx)
+		return nodeManager.GetRootNode().(Node[T]).GetValue(ctx), nil
 	case <-ctx.Done():
-		panic("timeout")
+		return *new(T), ctx.Err()
 	}
 }
