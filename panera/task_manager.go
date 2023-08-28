@@ -22,7 +22,10 @@ type taskManagerImpl struct {
 	dependencies map[NodeID]map[NodeID]struct{}
 	hasRun       map[NodeID]bool
 	rootTask     AnyNode
-	mutex        sync.RWMutex
+	// Not particularly efficient. There is a lot of room for improvement
+	// in terms of reducing lock contention but a giant lock works for a
+	// proof-of-concept.
+	mutex sync.RWMutex
 }
 
 func NewTaskManager(ctx context.Context, rootTask AnyNode) TaskManager {

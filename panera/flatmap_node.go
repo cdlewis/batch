@@ -2,7 +2,6 @@ package panera
 
 import (
 	"context"
-	"fmt"
 )
 
 type AnyFlatMap interface {
@@ -24,10 +23,8 @@ func NewFlatMapNode[T, U any](
 	node Node[T],
 	transformer func(T) Node[U],
 ) FlatMapNode[T, U] {
-	nodeID := NewNodeID()
-	fmt.Println("made flatmap with id", nodeID)
 	return &flatMapNodeImpl[T, U]{
-		id:    nodeID,
+		id:    NewNodeID(),
 		child: node,
 		fn:    transformer,
 	}

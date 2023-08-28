@@ -2,7 +2,6 @@ package panera
 
 import (
 	"context"
-	"fmt"
 )
 
 func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[string]Resolver) T {
@@ -19,7 +18,6 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 		// through the 'taskResolved' channel, which triggers a re-evaluate if
 		// any new work is executable.
 		for range taskResolved {
-			taskManager.PrintDependencyTree()
 
 			// Can we terminate?
 			if taskManager.GetRootTask().IsResolved(ctx) {
@@ -27,7 +25,6 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 			}
 
 			runnableTasks := taskManager.GetRunnableTasksIDs()
-			fmt.Println("Runnable tasks", runnableTasks)
 
 			// Group tasks into batch and non-batch
 			batchableTasks := map[NodeID]AnyBatchQueryNode{}
@@ -55,7 +52,6 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 				go func() {
 					resultsMap := resolvers[resolverID].Resolve(ctx, taskMap)
 					for id, result := range resultsMap {
-						fmt.Println("Resolve", id, result)
 						batchableTasks[id].SetResult(ctx, result)
 						taskManager.FinishTask(id)
 					}
@@ -79,7 +75,6 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 				// but requires special handling so for the moment we just evaluate the
 				// flatMap's transform function syncronously.
 				if flatMapNode, isFlatMap := currentTask.(AnyFlatMap); isFlatMap {
-					fmt.Println(">> Detected flatmap", taskID)
 					if flatMapNode.FlatMapFullyResolved(ctx) {
 						taskManager.FinishTask(taskID)
 					} else {
@@ -96,7 +91,6 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 				}
 
 				go func() {
-					fmt.Println("Executing regular task", taskID)
 					currentTask := taskManager.GetTask(taskID)
 					currentTask.Debug()
 
@@ -112,6 +106,7 @@ func ExecuteGraph[T any](parentCtx context.Context, node AnyNode, resolvers map[
 		}
 	}()
 
+	// Wait until all nodes are resolved or we time out
 	select {
 	case <-done:
 		return taskManager.GetRootTask().(Node[T]).GetValue(ctx)
